@@ -1,0 +1,66 @@
+/////////////////////////////////////////////////////////////////////////////////////
+//Function load_master_calendar
+//This function generates and load the master calendar table based on the input interval in ISO format
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//Input fields:
+//_varMinDate: min date of the interval
+//_varMaxDate: max date of the interval
+//_varDateName: name of the date field
+/////////////////////////////////////////////////////////////////////////////////////
+
+Sub _Load_Master_Calendar_by_Day_ISO(_varMinDate,_varMaxDate,_varDateName)
+
+// Create auxiliar calendar table
+TEMP_CALENDAR:
+LOAD
+Date ($(_varMinDate) + rowno()- 1) as Date
+AUTOGENERATE
+$(_varMaxDate) - $(_varMinDate) + 1;
+
+QuartersMap:  
+MAPPING LOAD   
+rowno() as Month,  
+Ceil (rowno()/3) as QuarterMap
+AUTOGENERATE (12);
+
+// Check _varDateName variable coming or not
+IF not(isnull(_varDateName)) THEN
+	qualify *;
+ELSE
+	_varDateName = 'M_CALENDAR' 
+ENDIF
+
+//Creación calendario desvinculado para realizar selecciones
+$(_varDateName):
+LOAD
+	Year(Date)&NUM(MONTH(Date),'00')&NUM(DAY(Date),'00')						AS [Date],
+	date(Date,'DD/MM/YYYY')  												AS [Day],
+	YEAR(Date) 																AS [Year],
+	MONTH(Date) 											               	AS [Month],
+	YEAR(Date) & NUM(MONTH(Date),'00')                                      As YearMonth,
+	YEAR(Date) & NUM(MONTH(Date),'00')                                      As YearMonthNum,
+	Dual('Q'&ApplyMap('QuartersMap',month(Date),Null())&chr(39)&Right(Year(Date),2),Year(Date)&ApplyMap('QuartersMap', month(Date), Null())) as YearQuarter,
+	Date(MonthStart(Date),'MMM-YY')										  	AS [MonthYear],
+	CEIL (NUM(Month(Date))/3) & chr(39) & Right(YEAR(Date),2)				AS [QuatrimesterNum], 
+	CEIL (NUM(Month(Date))/4) & chr(39) & Right(YEAR(Date),2)				AS [QuarterNum], 
+	CEIL (NUM(Month(Date))/6) & chr(39) & Right(YEAR(Date),2)				AS [SemesterNum],
+    MONTH(Date) & chr(39) & Right(YEAR(Date),2)                             AS [MonthYearShort],
+	CEIL (NUM(Month(Date))/4) 												AS [Quatrimester],
+	CEIL (NUM(Month(Date))/3) 												AS [Quarter],
+	'Q'&CEIL (NUM(Month(Date))/3) 											AS [Quarter Selector],
+
+	CEIL (NUM(Month(Date))/6)                                               AS [Semester],
+	Week(Date) as Week     
+RESIDENT TEMP_CALENDAR;
+
+unqualify *;
+
+//Drop used tables
+Drop Table TEMP_CALENDAR; 
+//Drop used variables
+LET _varMinDate = null();
+LET _varMaxDate = null();
+LET _varDateName = null();
+
+END SUB;

@@ -1,0 +1,88 @@
+//////////////////////////////////////LOADING COGS QVDs////////////////////////////////////
+// Load COGS Facts
+// Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. Load COGS facts
+
+// Mapping table to include the date as YYYY/MM/DD format
+MAP_QUARTER_MONTH:
+Mapping
+Load * Inline  [Quarter, Month
+				Q1, 03
+				Q2, 06
+				Q3, 09
+				Q4, 12
+];
+
+
+
+F_COGS_AUX:
+LOAD
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as Brand,
+	Num#(Num(Actual,'#,##0%'),'#,##0%') as Actual_Aux,
+	Date(Date#(Left([PROD Version],4)&Applymap('MAP_QUARTER_MONTH',Right([PROD Version],2))&'01','YYYYMMDD'),'YYYYMMDD') as Date,
+	'11' as [KPI ID]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.COGs.Metric)FF_COGS.qvd](qvd);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+	Upper(Trim([Brand])) as [B.Original_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as [B.Product_Brand],
+
+	ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '') as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)),
+			ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+	ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Brand)), '') as [B.Global_Brand],
+
+	ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Brand)), '') as [B.Local_Brand],
+	'COGS Flatfile' as B.Metric_Origin,
+	'COGS' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.COGs.Metric)FF_COGS.qvd](qvd);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+F_COGS_AUX_2:
+LOAD
+	Brand,
+	Date,
+	Year(Date) as Year,
+	[KPI ID],
+	Avg(Actual_Aux) as Actual
+RESIDENT F_COGS_AUX
+GROUP BY Brand, Date, [KPI ID];
+
+DROP TABLE F_COGS_AUX;
+
+
+LEFT Join(F_COGS_AUX_2)
+LOAD [KPI ID],
+     YEAR as Year, 
+    Num#(Num(TARGET,'#,##0%'),'#,##0%') as Target,
+     Num#(Num(TOLERANCE,'#,##0%'),'#,##0%') as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=11; // 11 is the KPI ID assigned for COGS (Commercial Brands only) in Layer 1 Extractor (Hard Coded)
+
+
+//Calculate status
+F_COGS:
+LOAD *,
+	$(v.StatusEvaluation(8, Actual, Target, Tolerance)) as Status
+Resident F_COGS_AUX_2;
+DROP Table F_COGS_AUX_2;
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_COGS;
+DROP Table F_COGS;

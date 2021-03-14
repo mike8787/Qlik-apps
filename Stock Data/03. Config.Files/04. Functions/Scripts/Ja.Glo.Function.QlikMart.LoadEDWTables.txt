@@ -1,0 +1,67 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION SYS TERADATA TABLES EXTRACTOR
+//----------------------------------------------------------------------------------------------
+//Example: call _load_teradata_tables(_docName,_sheetName,_area,_qlikMart)
+//This function loads teradata tables info for the defined _area that are set to be loaded in the desired _qlikMart
+//The Teradata metadata excel is  located in _docName in _sheetName
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_teradata_tables(_docName,_sheetName,_area,_qlikMart)
+	
+	SYS_TERADATA_TABLES:
+	LOAD 
+		Extractor_Folder,
+		Table_Name,
+		Table_Sheet,
+		Last_stored_Layer
+
+		 
+	FROM [$(_docName)]
+	(ooxml, embedded labels, table is $(_sheetName))
+	Where Extractor_Folder = '$(_area)' and $(_qlikMart) = 'Yes';
+
+
+	//Count the number of flat files to Load
+	LET vG.Sys.Extract.TotalFilesToLoad = FieldValueCount('Table_Name');
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//2.) For each one of the tables, load it accordingly
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	FOR vG.Sys.Extract.CountFilesToLoad = 0 to  ($(vG.Sys.Extract.TotalFilesToLoad)-1)
+		
+		//Get table name and sheet name (MUST be equal)
+		LET vG.Sys.Extract.TableSheet = PEEK( 'Table_Sheet', $(vG.Sys.Extract.CountFilesToLoad), 'SYS_TERADATA_TABLES' );
+		LET vG.Sys.Extract.TableName = PEEK( 'Table_Name', $(vG.Sys.Extract.CountFilesToLoad), 'SYS_TERADATA_TABLES' );
+		LET vG.Sys.Extract.Folder = PEEK( 'Extractor_Folder', $(vG.Sys.Extract.CountFilesToLoad), 'SYS_TERADATA_TABLES' );	
+		LET vG.Sys.Extract.Layer = PEEK( 'Last_stored_Layer', $(vG.Sys.Extract.CountFilesToLoad), 'SYS_TERADATA_TABLES' );	
+		
+		if (vG.Sys.Extract.Layer = 'L1') then
+			LET vG.Sys.Extract.Path = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Extract.Folder)$(vG.Sys.Extract.TableSheet)_L1.qvd';
+		elseif (vG.Sys.Extract.Layer = 'L2') then
+			LET vG.Sys.Extract.Path = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Extract.Folder)$(vG.Sys.Extract.TableSheet)_L2.qvd';
+		elseif (vG.Sys.Extract.Layer = 'L3') then
+			LET vG.Sys.Extract.Path = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Extract.Folder)$(vG.Sys.Extract.TableSheet)_L3.qvd';
+		else 
+			TRACE 'Wrong Layer Number';
+		endif;
+		
+		CONCATENATE (FACTS_E2ELC) LOAD *
+		FROM $(vG.Sys.Extract.Path)(qvd) ;
+		 
+	next;
+	
+	//Delete used variables and tables
+	LET vG.Sys.Extract.TotalFilesToLoad = null();
+	LET vG.Sys.Extract.CountFilesToLoad = null();
+	LET vG.Sys.Extract.TableSheet = null();
+	LET vG.Sys.Extract.TableName = null();
+	LET vG.Sys.Extract.Folder = null();
+	LET vG.Sys.Extract.Path = null();
+	LET vG.Sys.Extract.Layer = null();
+
+	DROP TABLE SYS_TERADATA_TABLES;
+
+End Sub;

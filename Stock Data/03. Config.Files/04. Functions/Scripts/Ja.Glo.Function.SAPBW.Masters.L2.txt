@@ -1,0 +1,85 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD table from file
+//----------------------------------------------------------------------------------------------
+//Example: _load_SAP_Master_QVDs_L2(_vQvdToExtract,_Metadata,_MetadataSheet,_MetadataPath,_QvdFolder)
+//This function Generates Layer.2 SAP qvds based on the ones from Layer.1, loading just the active fields
+//(displayed with active=yes) in the SAP metadata excel
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_vCubeToExtract : SAP cube to use
+//_Metadata : Metadata excel name
+//_MetadataSheet : Metadata excel sheet
+//_MetadataPath : Metadata excel path to
+//_MetadataQvdFolder : Qvd Folder in Layer.2 where generated Qvd must be stored
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+SUB _load_SAP_Master_QVDs_L2(_vQvdToExtract,_Metadata,_MetadataSheet,_MetadataPath,_QvdFolder)
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 1: Set variable containing all the fields to load from the desired Cube (not in mappings)
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	SYS_FIELD_SENTENCES:
+	LOAD 
+		concat(Field_ID, ',') as FieldSentences
+	     
+	FROM
+	[$(_MetadataPath)$(_Metadata)]
+	(ooxml, embedded labels, table is $(_MetadataSheet))
+	WHERE Demand='Yes' or Inventory='Yes';
+
+	LET vFieldSentences = Peek('FieldSentences', 0, 'SYS_FIELD_SENTENCES');
+	
+	DROP TABLE SYS_FIELD_SENTENCES;
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 2: Load qvds, mapping simple dimensions and delete overwriten fields
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	/////////////////////////////////////////////////////////////////
+	//If its material
+	IF ('$(_vQvdToExtract)'='$(vG.Sys.Extract.SAPBW.MaterialQVD)') then
+	//1.) Load Therapeutic area, Platform, Classification
+	$(_vQvdToExtract)_L1.5:
+	LOAD *,
+		if(upper(Replace([Classification],' ',''))='NEW','Strategic',[Classification]) as [Global Classification],
+		//All 'SP2CLNT050' needs to get converted to 'EUROPE2':
+		if(upper(Replace([Source System],' ',''))='SP2CLNT050','EUROPE2',[Source System]) as [Global Source System]
+		
+	;
+	LOAD applymap('MAPP_THERAP_AREA',upper(replace([E2E International Brand],' ','')),'Undefined') as [Therapeutic area],
+		applymap('MAPP_PLATFORM',upper(replace([E2E International Brand],' ','')),'Undefined') as [Platform],
+		applymap('MAPP_CLASSIFICATION',upper(replace([E2E International Brand],' ','')),'NonStrategic') as [Classification],
+		applymap('MAPP_DEM_BRAND',upper(replace([E2E International Brand],' ','')),null())				as [Demand Brand],
+		$(vFieldSentences)
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(_QvdFolder)$(_vQvdToExtract).qvd (qvd)
+	//Only the ones brand descriptive related
+	;
+	Drop fields [Source System];
+	RENAME fields [Global Source System] to [Source System];
+	//Store created table
+	STORE $(_vQvdToExtract)_L1.5 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L1.5.qvd (qvd);
+	DROP TABLE $(_vQvdToExtract)_L1.5;
+		
+	/////////////////////////////////////////////////////////////////
+	//If is customer
+	ELSE 
+	$(_vQvdToExtract)_L2:
+	LOAD 	$(vFieldSentences)
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(_QvdFolder)$(_vQvdToExtract).qvd (qvd)
+	;
+	//Store created table
+	STORE $(_vQvdToExtract)_L2 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L2.qvd (qvd);
+	DROP TABLE $(_vQvdToExtract)_L2;
+	ENDIF;
+
+	//Delete used function variables
+	LET vFieldSentences = null();
+	LET _vQvdToExtract = null();
+	LET _MetadataPath = null();
+	LET _Metadata = null();
+	LET _QvdFolder = null();
+	LET _MetadataSheet = null();
+
+END SUB;

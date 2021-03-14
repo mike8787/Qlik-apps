@@ -1,0 +1,86 @@
+﻿SET ThousandSep=',';
+SET DecimalSep='.';
+SET MoneyThousandSep=',';
+SET MoneyDecimalSep='.';
+SET MoneyFormat='€#,##0.00;-€#,##0.00';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='D/MM/YYYY';
+SET TimestampFormat='D/MM/YYYY hh:mm:ss[.fff]';
+SET MonthNames='Jan;Feb;Mar;Apr;May;Jun;Jul;Aug;Sep;Oct;Nov;Dec';
+SET DayNames='Mon;Tue;Wed;Thu;Fri;Sat;Sun';
+
+/////////////////////////////////////////////////////////////////////////////////////
+//Function load_master_calendar
+//This function generates and loads the master calendar table based on the input interval
+/////////////////////////////////////////////////////////////////////////////////////
+//
+//Input fields:
+//_varMinDate: min date of the interval
+//_varMaxDate: max date of the interval
+//_varTableName: name of the calendar table
+/////////////////////////////////////////////////////////////////////////////////////
+
+Sub _Load_Master_Calendar(_varMinDate,_varMaxDate,_varTableName)
+
+	//Mapping table to get the Quarter of each month
+	QuartersMap:  
+	MAPPING LOAD   
+	rowno() as Month,  
+	Ceil (rowno()/3) as Quarter  
+	AUTOGENERATE (12);
+	
+	//Base table for master calendar
+	TempCalendar:  
+	LOAD  
+		$(_varMinDate) + Iterno()-1 As Num,  
+		Date($(_varMinDate) + IterNo() - 1) as TempDate  
+	AutoGenerate 1 While $(_varMinDate) + IterNo() -1 <= $(_varMaxDate);  
+	
+	if (isnull(_varTableName)=-1) then
+	
+		M_CALENDAR:  
+		LOAD DISTINCT  
+			NUM(Year(TempDate)&Num(month(TempDate),'00')&'01') as Date,
+			//week(TempDate) as Week,
+			Year(TempDate) As Year,
+			Month(TempDate) As Month, 
+			//Month(TempDate) As Month,
+			NUM(Month(TempDate),'00')	As MonthNum,
+			Dual(Month(TempDate)&chr(39)&Right(Year(TempDate),2),NUM(Year(TempDate)&Num(month(TempDate),'00'))) as YearMonth,
+			NUM(Year(TempDate)&Num(month(TempDate),'00')) as YearMonthNum,
+			NUM(Year(TempDate))*12+NUM(Month(TempDate))-1 as YearMonthID,
+			Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null())&chr(39)&Right(Year(TempDate),2),Year(TempDate)&ApplyMap('QuartersMap', month(TempDate), Null())) as YearQuarter,
+			Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null()),ApplyMap('QuartersMap',month(TempDate),Null())) as Quarter
+		
+		Resident TempCalendar  
+		Order By TempDate ASC;  
+	else 
+		QUALIFY *;
+		$(_varTableName):
+		LOAD DISTINCT  
+			NUM(Year(TempDate)&Num(month(TempDate),'00')&NUM(day(TempDate),'00')) as Date,
+			//week(TempDate) as Week,
+			date(TempDate,'DD/MM/YYYY') as DateDesc,
+			Year(TempDate) as Year,
+			Month(TempDate) 				As Month,
+			NUM(Month(TempDate),'00')		AS MonthNum,
+			day(TempDate)	As Day,
+			Dual(Month(TempDate)&chr(39)&Right(Year(TempDate),2),NUM(Year(TempDate)&Num(month(TempDate),'00'))) as YearMonth,
+			NUM(Year(TempDate)&Num(month(TempDate),'00')) as YearMonthNum,
+			NUM(Year(TempDate))*12+NUM(Month(TempDate))-1 as YearMonthID,
+			Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null())&chr(39)&Right(Year(TempDate),2),Year(TempDate)&ApplyMap('QuartersMap', month(TempDate), Null())) as YearQuarter,
+			Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null()),ApplyMap('QuartersMap',month(TempDate),Null())) as Quarter
+		
+		Resident TempCalendar  
+		Order By TempDate ASC;  
+		UNQUALIFY *;
+		
+	endif;
+	//Drop used tables
+	Drop Table TempCalendar; 
+	//Drop used variables
+	LET _varMinDate = null();
+	LET _varMaxDate = null();
+	LET _varTableName = null();
+
+END SUB;

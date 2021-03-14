@@ -1,0 +1,159 @@
+//////////////////////////////////////LOADING Complaints QVD////////////////////////////////////
+// 1. Load Demand Facts
+// 2. Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+
+////////////////////////////////////// LOADING DEMAND QVDs //////////////////////////////////////
+// DEMAND MAPE 2
+F_DEM_AUX:
+LOAD * Inline [
+dummy_dem,
+1]
+;
+
+
+// DEMAND MAPE 2
+Concatenate(F_DEM_AUX)
+LOAD 
+	 Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,
+	 [In-Market Sales (History)], 
+     [Absolute diff 2],
+	 SID_Key,    //SID_Key HAS BEEN RENAMED BECAUSE WE HAVE DONE SO IN THE MATERIAL MASTER TABLE THIS TABLE HAS TO LINK TO (DEMAND_MASTER_L2.5_BSC)
+     //21 as SOURCE_ID,
+     3 as [KPI ID]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Demand)$(vG.Sys.Path.QVD.FlatFiles)FF_F_DATA_L2_20*.qvd]
+(qvd);
+
+
+
+// DEMAND MAPE 3
+Concatenate (F_DEM_AUX)
+LOAD 
+	 Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,
+	 [In-Market Sales (History)], 
+     [Absolute diff 3],
+	 SID_Key,    //SID_Key HAS BEEN RENAMED BECAUSE WE HAVE DONE SO IN THE MATERIAL MASTER TABLE THIS TABLE HAS TO LINK TO (DEMAND_MASTER_L2.5_BSC)
+     //21 as SOURCE_ID,
+     4 as [KPI ID]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Demand)$(vG.Sys.Path.QVD.FlatFiles)FF_F_DATA_L2_20*.qvd]
+(qvd);
+DROP Field dummy_dem;
+// DEMAND BIAS 12
+Concatenate (F_DEM_AUX)
+LOAD 
+	 Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,
+	 [In-Market Sales (History)], 
+     [Diff 12],
+	 SID_Key,    
+     //21 as SOURCE_ID,
+     5 as [KPI ID]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Demand)$(vG.Sys.Path.QVD.FlatFiles)FF_F_DATA_L2_20*.qvd]
+(qvd);
+
+// Joining Demand master brands and then based on SKU and Material Group in Demand master, mapping E2E International Brand, Global and Local Brand
+LEFT JOIN (F_DEM_AUX)
+LOAD 
+	 SID_Key,                        
+     Trim(m.SKU)&'-'& Upper(Trim([m.Material group])) as [B.Key_DEMAND_SAP],
+
+	 Upper(Trim([m.Material Description])) as [B.Original_Brand],
+
+     ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim([m.Material Description])),ApplyMap('MAP_BRAND_E2E', Upper(Trim([m.Material Description])), ApplyMap('MAP_SKUMATERIALGROUP_E2EBRAND', Trim(m.SKU)&'-'& Upper(Trim([m.Material group])),  
+     	Upper(Trim([m.Material Description]))))) as [Brand],
+
+     ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim([m.Material Description])),
+     	ApplyMap('MAP_BRAND_E2E', Upper(Trim([m.Material Description])),
+     		ApplyMap('MAP_SKUMATERIALGROUP_E2EBRAND', Trim(m.SKU)&'-'& Upper(Trim([m.Material group])), ''))) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+     ApplyMap('MAP_BRAND_E2E', Upper(Trim([m.Material Description])),
+     		ApplyMap('MAP_SKUMATERIALGROUP_E2EBRAND', Trim(m.SKU)&'-'& Upper(Trim([m.Material group])), '')) as [B.E2E_International_Brand],
+
+     ApplyMap('MAP_SKUMATERIALGROUP_GLOBALBRAND', Trim(m.SKU)&'-'& Upper(Trim([m.Material group])), '') as [B.Global_Brand],
+     
+     ApplyMap('MAP_SKUMATERIALGROUP_LOCALBRAND', Trim(m.SKU)&'-'& Upper(Trim([m.Material group])), '') as [B.Local_Brand]
+     //,m.Country             
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Demand)$(vG.Sys.Path.QVD.FlatFiles)FF_STA_DEMAND_MASTER_L2.qvd] (qvd)
+Where not len([m.Material Description])=0;
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+LOAD Distinct 
+	 SID_Key as B.SID_Key,
+	 [B.Key_DEMAND_SAP],
+	 [B.Original_Brand],
+	 'Demand Dashboard' as B.Metric_Origin,
+	 'DEMAND' as B.Metric
+	 ,[B.E2E_International_Brand],
+	 [B.E2E_International_Brand_Brand_Aligmnet],
+	 [B.Global_Brand],
+	 [B.Local_Brand],
+	 Brand as [B.Product_Brand]
+Resident F_DEM_AUX
+Where not len(Date)*len([Brand])=0;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+F_DEM_AUX2:
+NoConcatenate
+LOAD Date,
+	 Year(Date) as Year,
+	//ApplyMap('MAP_BRAND_ALIGNMENT',BRAND_AUX,BRAND_AUX) as Brand,
+	 [Brand],
+	 [KPI ID],
+	 sum(Pick([KPI ID]-2, [Absolute diff 2], [Absolute diff 3], [Diff 12]))/sum([In-Market Sales (History)]) as Actual
+Resident F_DEM_AUX
+Where not len(Date)*len([Brand])=0
+Group by Date, [Brand], [KPI ID];
+ 
+DROP Table F_DEM_AUX;
+
+TARGETS_DEM:
+LOAD * Inline [
+dummy,
+1];
+
+Concatenate(TARGETS_DEM)
+LOAD 2+match(%HIDE_OVERVIEW_METRIC,'MAPE-2','MAPE-3','BIAS-12') as [KPI ID],
+     YearTarget as Year, 
+     tar.Target as Target, 
+     tar.Tolerance as Tolerance
+
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Demand)$(vG.Sys.Path.QVD.FlatFiles)FC_TARGET_ALLTOT_20*.qvd]
+(qvd)
+Where ((%HIDE_OVERVIEW_METRIC='MAPE-2' or %HIDE_OVERVIEW_METRIC='MAPE-3' or %HIDE_OVERVIEW_METRIC='BIAS-12'))  and not IsNull(tar.Target) and tar.Target <> 0 and tar.Tolerance <> 0 ;
+
+DROP Field dummy;
+
+Left Join (F_DEM_AUX2)
+LOAD *
+Resident TARGETS_DEM;
+DROP Table TARGETS_DEM;
+
+F_DEM:
+NoConcatenate
+LOAD *,
+	 $(v.StatusEvaluation(12, Actual, Target, Tolerance)) as Status
+Resident F_DEM_AUX2;
+DROP Table F_DEM_AUX2;
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_DEM
+Where [KPI ID] <> 3
+;
+DROP Table F_DEM;
+
+//STORE F_INV into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_INV.qvd];
+//DROP Table F_INV;

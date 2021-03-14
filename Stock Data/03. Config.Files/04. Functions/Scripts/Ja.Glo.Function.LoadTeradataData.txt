@@ -1,0 +1,103 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD SQL METADATA
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sys_variables(_docName,_sheetName,_environment)
+//This function loads variables located in _docName in _sheetName
+//
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+//the following structure: Fields: [Var Description LX],[Var Value]
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_metadataPath: Excel document name
+//_tablesTab: Column of the environment. For each environment there is a column with 0s and 1s
+//_environment: 
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_metadata_teradata_generator(_metadataPath, _tablesTab, _environment)
+	
+		//Read the list of tables to be loaded (Table Load = Yes)
+		SYS_TABLES_TO_LOAD:
+		LOAD DISTINCT 	Source as [Sys Source],
+						Sheet as [Sys Table To Load],  //this field will be used for counting purposes
+						[Source Table] as [Sys Source Table], 
+						Trim([BPM Table]) as [Sys Table Model], 
+						Trim([Where Clause]) as [Sys Where Clause],
+						Trim([Historical Depth]) as [Sys Historical Depth],
+						Trim([Time Field]) as [Sys Time Field],
+						Trim([QVD Type]) as [Sys QVD Type],
+						Trim([QVD Path]) as [Sys QVD Path]
+	
+		FROM [$(_metadataPath)]
+		(ooxml, embedded labels, table is [$(_tablesTab)])
+		WHERE [Table Load] = 'Yes' and Source = '$(_environment)';
+		// Each instance of the function is only loading one environment in the function variable '_environment'
+		// The row of the environment it is only load if it has a 'Yes' value in the field 'Table Load'
+
+		////////////////////////////////////////////////////////////////////////////////////
+	
+		//Count the number of Tables to Load
+		LET vG.Sys_Total_TablesToLoad = FieldValueCount('Sys Table To Load');
+	
+		//For each table to Load...
+		FOR vG.Sys_TableToLoadID = 0 To ($(vG.Sys_Total_TablesToLoad)-1)
+	
+			//Read the details of the Table to Load
+			LET vG.Sys_TableToLoad = Peek('Sys Table To Load', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');			// Concept to be loaded
+			LET vG.Sys_SourceTable = Peek('Sys Source Table', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');			// Source table to load
+	    	LET vG.Sys_TableModel = Peek('Sys Table Model', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');				// Table name in the Qlikview model
+			LET vG.Sys_WhereClause = Peek('Sys Where Clause', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');			// Where clause if applicable
+			LET vG.Sys_HistoricalDepth = Peek('Sys Historical Depth', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');	// Historical Depth (N/A, Incremental, Historical)
+			LET vG.Sys_TimeField = Peek('Sys Time Field', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');				// Time field to be used for filtering time (incremental flow)
+			LET vG.Sys_QVDType = Peek('Sys QVD Type', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');					// Type of QVD (Master or Fact data)
+	    	LET vG.Sys_QVDPath = Peek('Sys QVD Path', $(vG.Sys_TableToLoadID), 'SYS_TABLES_TO_LOAD');					// Path to the QVD in Layer 1
+		
+			//Prepare the Load Sentences for the Table to Load
+			SYS_LOAD_SENTENCES:
+			LOAD Trim(SubField(Concat(' '&Trim([Source Table]),','&chr(10)),',',1)) as [Source Table],
+		     		Concat(if(isnull([Source Field]),null(),' '&Trim([Source Field])),','&chr(10)) as [Source Field],
+		     		Concat(' '&Trim([Source Formula])&' as ['&Trim([BPM Field])&']', ',' & chr(10)) as [BPM Field]
+			FROM [$(_metadataPath)]
+			(ooxml, embedded labels, table is [$(vG.Sys_TableToLoad)])
+			WHERE [Field Load] = 'Yes';
+	
+			LET vG.Sys_SourceTable = FieldValue('Source Table', 1);
+			LET vG.Sys_SourceField = FieldValue('Source Field', 1);
+			LET vG.Sys_ModelField =  FieldValue ('BPM Field', 1);
+
+	    ////////////////////////////////////////////////////////////////////////
+		/////////////////////////// Table Loading //////////////////////////////
+		////////////////////////////////////////////////////////////////////////
+        	//Path to the QVD
+			LET vG.Sys_QVDName = '$(vG.Sys_QVDPath)$(vG.Sys_TableModel).qvd';		
+		
+			$(vG.Sys_TableModel):
+			LOAD $(vG.Sys_ModelField);
+			SQL SELECT $(vG.Sys_SourceField) 
+			FROM $(vG.Sys_SourceTable)
+			$(vG.Sys_WhereClause);
+
+        	//Store the table with the proper extension
+			STORE $(vG.Sys_TableModel) INTO $(vG.Sys_QVDName);
+        	DROP Table $(vG.Sys_TableModel);
+        	DROP Table SYS_LOAD_SENTENCES;
+        
+        	NEXT vG.Sys_TableToLoadID
+
+			DROP Table SYS_TABLES_TO_LOAD;
+
+	LET vG.Sys_QVDType = Null();
+	LET vG.Sys_HistoricalDepth = Null();
+	LET vG.Sys_QVDName = Null();
+	LET vG.Sys_Total_TablesToLoad = Null();
+	LET vG.Sys_TableToLoadID = Null();
+	LET vG.Sys_TableToLoad = Null();
+	LET vG.Sys_QVDPath = Null();
+	LET vG.Sys_TableModel = Null();
+	LET vG.Sys_ModelField = Null();
+	LET vG.Sys_SourceField = Null();
+	LET vG.Sys_SourceTable = Null();
+	LET vG.Sys_TimeField = Null()
+
+end sub

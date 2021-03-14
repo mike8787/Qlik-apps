@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+ <QvdTableHeader>
+   <QvBuildNo>50600</QvBuildNo>
+   <CreatorDoc>D:\Nueva carpeta\Qlik Sense\Apps\Sense\Apps\Stock Overview (BackUp).qvf</CreatorDoc>
+   <CreateUtcTime>2019-11-22 20:51:17</CreateUtcTime>
+   <SourceCreateUtcTime></SourceCreateUtcTime>
+   <SourceFileUtcTime></SourceFileUtcTime>
+   <SourceFileSize>-1</SourceFileSize>
+   <StaleUtcTime></StaleUtcTime>
+   <TableName>M_PORTFOLIO</TableName>
+   <Fields>
+     <QvdFieldHeader>
+       <FieldName>Stock ID</FieldName>
+       <BitOffset>5</BitOffset>
+       <BitWidth>4</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>10</NoOfSymbols>
+       <Offset>0</Offset>
+       <Length>50</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$key</String>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Inv Stock Name</FieldName>
+       <BitOffset>9</BitOffset>
+       <BitWidth>4</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>10</NoOfSymbols>
+       <Offset>50</Offset>
+       <Length>127</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Stock Amount</FieldName>
+       <BitOffset>0</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>23</NoOfSymbols>
+       <Offset>177</Offset>
+       <Length>203</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Number Titles</FieldName>
+       <BitOffset>17</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>23</NoOfSymbols>
+       <Offset>380</Offset>
+       <Length>115</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Date</FieldName>
+       <BitOffset>64</BitOffset>
+       <BitWidth>1</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>0</NoOfSymbols>
+       <Offset>495</Offset>
+       <Length>0</Length>
+       <Comment></Comment>
+       <Tags></Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Price</FieldName>
+       <BitOffset>37</BitOffset>
+       <BitWidth>2</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>495</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Amount</FieldName>
+       <BitOffset>39</BitOffset>
+       <BitWidth>2</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>500</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Fee</FieldName>
+       <BitOffset>41</BitOffset>
+       <BitWidth>2</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>505</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Date</FieldName>
+       <BitOffset>22</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>26</NoOfSymbols>
+       <Offset>510</Offset>
+       <Length>312</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+         <String>$ascii</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Price</FieldName>
+       <BitOffset>27</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>15</NoOfSymbols>
+       <Offset>822</Offset>
+       <Length>131</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Amount</FieldName>
+       <BitOffset>32</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>16</NoOfSymbols>
+       <Offset>953</Offset>
+       <Length>132</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Fee</FieldName>
+       <BitOffset>13</BitOffset>
+       <BitWidth>4</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>13</NoOfSymbols>
+       <Offset>1085</Offset>
+       <Length>109</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>REALIZ,</FieldName>
+       <BitOffset>43</BitOffset>
+       <BitWidth>2</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>1194</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>LATENTE</FieldName>
+       <BitOffset>49</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>15</NoOfSymbols>
+       <Offset>1199</Offset>
+       <Length>127</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Charged Rents</FieldName>
+       <BitOffset>54</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>17</NoOfSymbols>
+       <Offset>1326</Offset>
+       <Length>149</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Operation</FieldName>
+       <BitOffset>45</BitOffset>
+       <BitWidth>2</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>2</NoOfSymbols>
+       <Offset>1475</Offset>
+       <Length>6</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+         <String>$ascii</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Stock Dividend</FieldName>
+       <BitOffset>47</BitOffset>
+       <BitWidth>2</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>2</NoOfSymbols>
+       <Offset>1481</Offset>
+       <Length>6</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+         <String>$ascii</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Operation ID</FieldName>
+       <BitOffset>59</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>19</NoOfSymbols>
+       <Offset>1487</Offset>
+       <Length>115</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+         <String>$ascii</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Q</FieldName>
+       <BitOffset>65</BitOffset>
+       <BitWidth>7</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>.</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>0</NoOfSymbols>
+       <Offset>1602</Offset>
+       <Length>0</Length>
+       <Comment></Comment>
+       <Tags></Tags>
+     </QvdFieldHeader>
+   </Fields>
+   <Compression></Compression>
+   <RecordByteSize>9</RecordByteSize>
+   <NoOfRecords>35</NoOfRecords>
+   <Offset>1602</Offset>
+   <Length>315</Length>
+   <Lineage></Lineage>
+   <Comment></Comment>
+ </QvdTableHeader>
+          	                  
+   Abengoa B BBVA DIA Grupo Ezentis Quabit Red El√©ctrica Espa√±ola Siemens Gamesa Corp. CaixaBank Align Tech. Inc. IAG    )\è¬ı(4@fffffm†@ÖÎQ∏ÖA@H·zÆ5@H·zÆáH@fffffE@
+◊£p=6ü@
+◊£p=
+<@
+◊£p=
+,@∏ÖÎQó@fffffXá@R∏ÖÎe•@ÖÎQ∏~[@q=
+◊£ÑÉ@R∏ÖÎ1S@ÖÎQ∏Âó@q=
+◊£
+£@fffffπ•@ÕÃÃÃÃL®@fffffÉ•@ffffÊ§@fffff∆£@ƒ	    ,                      |  [  ¯  5   -  %   ·  ò   Ê            ê              24/08/2015 25/11/2015 09/12/2013 25/04/2014 24/10/2014 16/01/2015 24/04/2015 02/11/2015 27/04/2016 26/10/2016 26/04/2017 27/05/2013 23/10/2013 13/07/2015 11/03/2015 17/11/2017 21/08/2017 20/03/2017 07/09/2016 17/05/2016 09/02/2018 18/01/2018 05/07/2018 29/10/2018 26/07/2019 12/03/2019 G·zÆGÈ?öôôôôô·?·zÆG· @    333333@ffffff@{ÆG·zÏ?\è¬ı(\ﬂ?öôôôôô˝?     Ä0@>
+◊£pΩ)@öôôôôô@
+◊£p=ri@8EGr˘Áf@J+á@     Êû@öôôôô)è@     À£@    ÖÎQ∏ú@33333î£@q=
+◊£è@ÆG·zLü@ÃÃÃÃÃfÅ@∏  Ã	  33333 ß@33333ß@gfffÊC¶@)\è¬ı~ü@öôôôôô£@ÏQ∏ÖÎ+@)\è¬ı(@      #¿    ÆG·zÓ0@§p=
+◊#+@\è¬ı(‹)@öôôôô*@R∏ÖÎQ*@        ¿1¿ÖÎQ∏û0¿öôôôô*¿    §p=
+◊≠û¿p=
+◊£∆é¿ÕÃÃÃÃÑ{¿    ]è¬ı(,i@ÕÃÃÃÃQê¿öôôôôQp¿·zÆGóÜ@ÖÎQ∏ÓP@ÖÎQ∏ÓT¿R∏ÖÎh¿ç   q=
+◊£Ä\@ÖÎQ∏úÄ@43333≥"@    ÆG·zû]@\è¬ı(\ˇ?\è¬ı(\Ô?>
+◊£p=˙?G·zÆGÈ?è¬ı(\èˆ?¬ı(\è¬Â?)\è¬ı(‹?
+◊£p=‚`@H·zÆG˘?p=
+◊£pÂ?H·zÆGı?ÖÎQ∏ÖÛ?ÆG·z¶g@√ı(\è"T@∏ÖÎQ®g@Y N N Y O1_1 O1_2 O1_3 O1_4 O1_5 O1_6 O1_7 O1_8 O1_9 O2_1 O2_2 O2_3 O2_4 O2_5 O2_6 O2_7 O2_8 O2_9 O2_10          BDÑBUÖ Cd∆CUá dÜ!DU… e¶J)Eı f¶å)EıK! f¶Ã)EıK) e¶
+*Eıã1 f¶L*EıÀ9 g¶é*EıB e¶ *EıKJ h¶+EıãR i¶R3FUÕZ j¶î+Eıc e¶J)Eıi k¶ñ)EıKs f¶Ã)EıKy j¶*EıãÉ f¶L*EıÀâ h¶ê*EıÀì e¶ *EıKö h¶+Eıã¢ å»ÿ;GU ≠ÍDHUë Æ
+]LIUì œ¨û,Eıã` –¨‡TJUïX —¨"-Eıã “¨d-KUã Û.ß]LUW QÈeMUô 5s+nNUõ VïmvOUù WµØ~PUüX x◊ÒÜQU° 

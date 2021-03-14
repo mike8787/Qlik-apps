@@ -1,0 +1,116 @@
+//////////////////////////////////////LOADING DOS QVD////////////////////////////////////
+//	1. Load DOS Facts
+//	2. Concatenate DOS BULK Metric
+//	2. Concatenate DOS FG Metric
+//	3. Concatenate DOS API Metric
+//  Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+// 1. Load DOS Facts
+DOS:
+LOAD
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as Brand,
+	Num([DOS BULK],'#,##0.00') As [DOS BULK],
+	Num([DOS FG],'#,##0.00')   As [DOS FG],
+	Num([DOS API],'#,##0.00')  As [DOS API],
+	Num([Target_BULK],'#,##0.00') As [Target_BULK],
+	Num([Target_FG],'#,##0.00')   As [Target_FG],
+	Num([Target_API],'#,##0.00')  As [Target_API],
+	[PROD Version],
+	Date(Date#(Left([PROD Version],4)&Right([PROD Version],2)&'01','YYYYMMDD'),'YYYYMMDD') as Date
+	
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.DOS.Metrics)FF_DOS_METRIC.qvd](qvd);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim([Brand])) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as [B.Product_Brand],
+
+    ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '') as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)),
+			ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Brand)), '') as [B.Global_Brand],
+    
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Brand)), '') as [B.Local_Brand],
+    'DOS Flatfile' as B.Metric_Origin,
+    'DOS' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.DOS.Metrics)FF_DOS_METRIC.qvd](qvd);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 2. Concatenate DOS BULK
+//	2.1 Adding targets
+//		If DOS BULK value is less than or equal to Target_BULK value than Green else Red
+//	2.2 Adding status
+//		If DOS BULK value is less than or equal to Target_BULK then 1 (which is green) else 2 (which red)
+
+DOS_METRIC:
+NoConcatenate
+Load Brand,
+	[DOS BULK] As Actual,
+	Date,
+	Target_BULK as Target,
+	//Target_BULK as Tolerance,
+	//'≤'&Target_BULK as Green,
+	//'>'&Target_BULK as Red,
+	If ([DOS BULK] <= Target_BULK,2,4) as Status,		
+	'53' as [KPI ID]
+Resident DOS;
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 3. Concatenate DOS FG
+//	3.1 Adding targets
+//		If DOS FG value is less than or equal to Target_API value than Green else Red
+//	3.2 Adding status
+//		If DOS FG value is less than or equal to Target_API then 1 (which is green) else 2 (which red)
+
+Concatenate (DOS_METRIC)
+Load Brand,
+	[DOS FG] As Actual,
+	Date,
+	Target_FG as Target,
+	//Target_FG as Tolerance,
+	/*'≤'&Target_FG as Green,
+	'>'&Target_FG as Red,*/
+	If ([DOS FG] <= Target_FG,2,4) as Status,		
+	'54' as [KPI ID]
+Resident DOS;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 4. Concatenate DOS API
+//	4.1 Adding targets
+//		If DOS API value is less than or equal to Target_API value than Green else Red
+//	4.2 Adding status
+//		If DOS API value is less than or equal to Target_API then 1 (which is green) else 2 (which red)
+
+Concatenate (DOS_METRIC)
+Load Brand,
+	[DOS API] As Actual,
+	Date,
+	Target_API as Target,
+	//Target_API as Tolerance,
+	//'≤'&Target_API as Green,
+	//'>'&Target_API as Red,
+	If ([DOS API] <= Target_API,2,4) as Status,		
+	'55' as [KPI ID]
+Resident DOS;
+
+Drop Table DOS;
+
+//Concatenate DOS Metrics with facts
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident DOS_METRIC;
+DROP Table DOS_METRIC;

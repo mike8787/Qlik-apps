@@ -1,0 +1,215 @@
+
+//////////////////////////////////////LOADING VCRM QVD////////////////////////////////////
+//VCRM QVD
+// VCRM TARGET
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. Load VCRM facts
+
+
+MAP_QUARTER_MONTH:
+Mapping
+Load * Inline  [Quarter, Month
+                Q1, 03
+                Q2, 06
+                Q3, 09
+                Q4, 12
+];
+
+
+
+F_VCRM_AUX:
+LOAD
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as Brand,
+	Actual,
+	Date(Date#(Left([PROD Version],4)&Applymap('MAP_QUARTER_MONTH',Right([PROD Version],2))&'01','YYYYMMDD'),'YYYYMMDD') as Date
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.VCRM.Metric)FF_VCRM_METRIC.qvd](qvd)
+Where [Unique Risk Indicator] = 1;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim([Brand])) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as [B.Product_Brand],
+
+    ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '') as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)),
+			ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Brand)), '') as [B.Global_Brand],
+
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Brand)), '') as [B.Local_Brand],
+    
+    'VCRM Flatfile' as B.Metric_Origin,
+    'VCRM' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.VCRM.Metric)FF_VCRM_METRIC.qvd](qvd)
+Where [Unique Risk Indicator] = 1;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Load AVG VCRM Metric
+F_VCRM_AUX_2:
+LOAD
+	Brand,
+	Num(Avg(Actual),'#,##0.00') as Actual,
+	Year(Date) as Year,
+	Date
+Resident F_VCRM_AUX where len(trim(Date))>0
+Group by Brand, Date;
+
+LEFT Join(F_VCRM_AUX_2)
+LOAD [KPI ID],
+     YEAR as Year, 
+     TARGET as Target,
+     TOLERANCE as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=7; // 7 is the KPI ID assigned for VCRM in Layer 1 Extractor (Hard Coded)
+
+//Load Highest VCRM Metric
+F_VCRM_AUX_3:
+NoConcatenate
+LOAD
+	Brand,
+	Num(Max(Actual),'#,##0.00') as Actual,
+	Year(Date) as Year,
+	Date
+Resident F_VCRM_AUX where len(trim(Date))>0
+Group by Brand, Date;
+
+//Drop Table
+Drop Table F_VCRM_AUX;
+
+LEFT Join(F_VCRM_AUX_3)
+LOAD '99' as [KPI ID],
+     YEAR as Year, 
+     TARGET as Target,
+     TOLERANCE as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=7; // 7 is the KPI ID assigned for VCRM in Layer 1 Extractor (Hard Coded)
+
+//Concatenate Avg and Highest VCRM
+F_VCRM_AUX_4:
+NoConcatenate
+LOAD *
+Resident F_VCRM_AUX_2;
+Concatenate (F_VCRM_AUX_4)
+LOAD *
+Resident F_VCRM_AUX_3;
+
+DROP TABLES F_VCRM_AUX_2, F_VCRM_AUX_3;
+
+//Calculate status
+F_VCRM:
+LOAD *,
+	$(v.StatusEvaluation(6, Actual, Target, Tolerance)) as Status
+Resident F_VCRM_AUX_4;
+
+DROP Table F_VCRM_AUX_4;
+
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_VCRM;
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// VCRM Facts for Development Brands
+
+VCRM: 
+LOAD Brand as Brand_AUX, 
+     Actual, 
+     Date, 
+     [KPI ID], 
+     Target, 
+     Tolerance, 
+     Status
+Resident F_VCRM
+Where [KPI ID] <> 99;
+
+DROP Table F_VCRM;
+
+// Creating a table to get the max date in order to load the values from the latest flaftile (agreed by business)
+MAX_DATE:
+NoConcatenate
+LOAD distinct
+Max(Date) as [Max Date]
+Resident VCRM 
+Order by Date DESC;
+
+LET v.Max_Date= peek('Max Date',0,'MAX_DATE');
+
+Drop table MAX_DATE; 
+
+VCRM_SG12_AUX_10:
+LOAD Brand, 
+     SG9, 
+     SG10, 
+     SG11, 
+     SG12
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)Development Metric Conversions\FF_DEVELOPMENT_METRIC_CONVERSION_VCRM.qvd]
+(qvd);
+
+
+
+//Getting StageGate values for different VCRM flatfiles
+VCRM_SG12_AUX:
+CrossTable(StageGate, Value)
+LOAD Brand, 
+     SG9, 
+     SG10, 
+     SG11, 
+     SG12
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)Development Metric Conversions\FF_DEVELOPMENT_METRIC_CONVERSION_VCRM.qvd]
+(qvd);
+
+
+NoConcatenate
+VCRM_SG12:
+Load Upper(Trim(Brand)) as Brand_AUX,
+    ApplyMap('MAP_STAGEGATE_STAGEGATEID',Upper(Trim(Replace(StageGate,' ',''))), '') as StageGateId,
+    If(Value='Current SG', Date($(v.Max_Date),'YYYYMMDD'), Date(Date#(Value&'01','YYYYMMDD'),'YYYYMMDD')) as Date
+    
+Resident VCRM_SG12_AUX;
+
+Drop Table VCRM_SG12_AUX;
+
+Left Join (VCRM_SG12)
+Load
+    *
+Resident VCRM;
+
+Drop table VCRM;
+
+
+
+// Joining to include the brand with other details
+Left Join (VCRM_SG12)
+LOAD Upper(Trim(ProductName)) as Brand_AUX, 
+     Upper(Trim(ProductName))& If(Len(ProductStrength) > 0, '-'&Upper(Trim(ProductStrength)))& If(Len(AdditionalClarification) > 0,'-'&Upper(Trim(AdditionalClarification))) as Brand
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_PRODUCT.qvd]
+(qvd);
+
+Drop Field Brand_AUX from VCRM_SG12;
+
+
+Concatenate(JSC_FACTS)
+LOAD *,
+0 as [Commercial Brand],
+1 as [Development Brand]
+Resident VCRM_SG12;
+
+Drop table VCRM_SG12;

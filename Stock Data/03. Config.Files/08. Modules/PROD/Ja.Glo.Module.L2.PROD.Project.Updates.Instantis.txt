@@ -1,0 +1,74 @@
+///////////////////////////////////LOADING Product Financial /////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+set vAuxCleanBrand = Purgechar(Replace(Replace(Product,TextBetween(Product,'(',')',2),''),TextBetween(Product,'(',')',1),''),'()');
+//Variable created to avoid having large expressions in the script (Product mappings).
+
+Project_Updates: 
+Load ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim($(vAuxCleanBrand))), ApplyMap('MAP_BRAND_E2E', Upper(Trim($(vAuxCleanBrand))), Upper(Trim($(vAuxCleanBrand))))) as Brand, 
+     [Project ID] as [VSM.Instantis.Project ID], 
+     [Project Name] as [VSM.Instantis.Project Name], 
+     [Project Status] as [VSM.Instantis.Project Status],
+     [Country-Site] as [VSM.Instantis.Country - Site], 
+     [Project Phase] as [VSM.Instantis.Project Phase], 
+     [LE Close Date] as [VSM.Instantis.LE Close Date], 
+     [Strategic Initiative] as [VSM.Instantis.Strategic Initiative], 
+     [Overall Status] as [VSM.Instantis.Overall Status], 
+     [Actual CY] as [VSM.Instantis.Actual CY], 
+     [LE CAPEX Total] as [VSM.Instantis.LE CAPEX Total], 
+     [LE CAPEX PY] as [VSM.Instantis.LE CAPEX PY], 
+     [LE CAPEX CY] as [VSM.Instantis.LE CAPEX CY], 
+     [LE CAPEX NY] as [VSM.Instantis.LE CAPEX NY], 
+     [Expenses Total] as [VSM.Instantis.Expenses Total],
+     [Expenses PY] as [VSM.Instantis.Expenses PY],
+     [Expenses CY] as [VSM.Instantis.Expenses CY],
+     [Expenses NY] as [VSM.Instantis.Expenses NY]
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)\Instantis\FF_INSTANTIS_PROJECT_UPDATES.qvd] (qvd)
+Where Not Len($(vAuxCleanBrand))=0 and ([Project Phase] = 'Approved Project' or [Project Phase] = 'Proposed for BP' or [Project Phase] = 'Project in BP' or [Project Phase] = 'Accepted Project Case') and [Project Status] Like '*Active*';
+
+// Storing the table to load the master fields from this table into Product Master
+STORE Project_Updates into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)FF_INSTANTIS_PROJECT_UPDATES_L2.qvd];
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim(SubField($(vAuxCleanBrand),'(',1))) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim($(vAuxCleanBrand))), ApplyMap('MAP_BRAND_E2E', Upper(Trim($(vAuxCleanBrand))), Upper(Trim($(vAuxCleanBrand))))) as [B.Product_Brand],
+
+    ApplyMap('MAP_BRAND_E2E', Upper(Trim($(vAuxCleanBrand))), '') as [B.E2E_International_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim($(vAuxCleanBrand))),
+            ApplyMap('MAP_BRAND_E2E', Upper(Trim($(vAuxCleanBrand))), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim($(vAuxCleanBrand))), '') as [B.Global_Brand],
+
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim($(vAuxCleanBrand))), '') as [B.Local_Brand],
+    
+    'Instantis Flatfile' as B.Metric_Origin,
+    'PROJECT UPDATES' as B.Metric
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)\Instantis\FF_INSTANTIS_PROJECT_UPDATES.qvd] (qvd)
+Where Not Len(Product)=0;
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Concatenate Financial Metric with facts
+Concatenate(JSC_FACTS_FINAL)
+LOAD 'SID_INSTANTIS|'&[VSM.Instantis.Project ID]&Brand as SID_Brand,
+     [VSM.Instantis.Actual CY], 
+     [VSM.Instantis.LE CAPEX Total], 
+     [VSM.Instantis.LE CAPEX PY], 
+     [VSM.Instantis.LE CAPEX CY], 
+     [VSM.Instantis.LE CAPEX NY], 
+     [VSM.Instantis.Expenses Total],
+     [VSM.Instantis.Expenses PY],
+     [VSM.Instantis.Expenses CY],
+     [VSM.Instantis.Expenses NY]
+Resident Project_Updates;
+DROP Table Project_Updates;

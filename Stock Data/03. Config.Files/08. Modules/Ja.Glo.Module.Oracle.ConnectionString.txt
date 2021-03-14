@@ -1,0 +1,4 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//1.) Custome connection string to connect to the Oracle comments database
+OLEDB CONNECT TO [Provider=OraOLEDB.Oracle.1;Password=dnfejrf_845;Persist Security Info=True;User ID=DMBA_QLICKVIEWPILOT;Data Source=COMMENTS_DB;Extended Properties=""];
+

@@ -1,0 +1,48 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION Load Admin Sys Variables
+//----------------------------------------------------------------------------------------------
+//Example: call _load_admin_sys_variables(_docName,_sheetName,_detailLevel)
+//This function loads variables located in _docName in _sheetName for the admin variables dashboard
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+// the following structure: Fields: [Var Description LX],[Var Value]
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_admin_sys_variables(_docName,_sheetName,_detailLevel)
+
+	//Variables load from excel file
+	if '$(_detailLevel)'='L4'	then //If level 4 detail 
+	
+        CONCATENATE (SYS_ADMIN_VARIABLES_INFO)
+	LOAD [Var Description L1],
+		[Var Description L2],
+		[Var Description L3],
+		[Var Description L4], 
+		[Var Value],
+		[System Label],
+		[Var Comment]
+	FROM [$(_docName)]
+	(ooxml, embedded labels, table is $(_sheetName));
+	
+	ELSE 
+	CONCATENATE (SYS_ADMIN_VARIABLES_INFO)
+	LOAD [Var Description L1],
+		[Var Description L2],
+		[Var Description L3],
+		[Var Description L4], 
+		[Var Description L5],
+		[Var Value],
+		[System Label],
+		[Var Comment]
+	FROM [$(_docName)]
+	(ooxml, embedded labels, table is $(_sheetName));
+	
+        end if;
+	
+	//Drop used variables
+	LET _docName= null();
+	LET _sheetName= null();
+	LET _detailLevel= null();
+	
+End Sub;

@@ -1,0 +1,177 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//MODULE SYS SAP MASTER DATA TO LOAD
+//----------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+// List of all BI Tables in SAP. Will be used to download associated tables for master data
+// Tables area download directly from SAP SYSTEM
+SYS_SAP_TABLES:
+LOAD TABNAME, BI_TABNAME
+Where BI_TABNAME >= 1;
+LOAD TABNAME,
+WildMatch(TABNAME,'*/BI0/*', '*/BIC/*') as BI_TABNAME;
+SQL SELECT TABNAME FROM DD02L where ( TABCLASS = 'TRANSP' or TABCLASS = 'POOL' or TABCLASS = 'CLUSTER' or ( TABCLASS = 'VIEW' and ( VIEWCLASS = 'D' or VIEWCLASS = 'P' ) ) ) ;
+
+
+MASTER_DATA_SIDS:  //Manually add country and division since are beeing used but do not come from cubes that are beeing extracted
+	LOAD * Inline [
+	_DUMMY_ID, _DUMMY, SID_0COUNTRY, SID_0DIVISION
+	1, 1,	1,	1	
+	];
+
+SYS_EXTRACTORS:
+LOAD Distinct Extractor,
+     Extractor_Type 
+FROM [$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SAP.Name)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Cubes))
+Where Object_Type = 'cube' and Extractor_Type<>'NA';
+
+
+LET vG.Sys.Extract.SAPSQLCube.NumOfExtractor = FieldValueCount('Extractor');
+
+FOR vG.Sys.Extract.SAPSQLCube.CountExtractor = 1 to $(vG.Sys.Extract.SAPSQLCube.NumOfExtractor)
+
+    LET vG.Sys.Extract.SAPSQLCube.Extractor = Peek('Extractor', $(vG.Sys.Extract.SAPSQLCube.CountExtractor)-1, 'SYS_EXTRACTORS');
+
+// Master Data Dimensions needed to create the cubes. This files contains all Dimensions SIDs used in the different facts
+Concatenate(MASTER_DATA_SIDS)
+LOAD * FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Master.Data)MASTER_DATA_SIDS_$(vG.Sys.Extract.SAPSQLCube.Extractor).qvd](qvd);
+
+NEXT vG.Sys.Extract.SAPSQLCube.CountExtractor
+
+DROP Fields _DUMMY, _DUMMY_ID;
+DROP Fields $(vG.Sys.Extract.SAPBW.StandardDim);
+DROP Table SYS_EXTRACTORS;
+//Defining the tables and domain trhough SID definition. If it has a 0 after the domain is BI0, if not is BIC
+LET vG.Sys.Extract.SAPSQLCube.DimNumOfFields = NoOfFields('MASTER_DATA_SIDS');
+
+FOR vG.Sys.Extract.SAPSQLCube.DimFields = 1 to $(vG.Sys.Extract.SAPSQLCube.DimNumOfFields)
+
+	LET vG.Sys.Extract.SAPSQLCube.DimFieldNames = FieldName($(vG.Sys.Extract.SAPSQLCube.DimFields),'MASTER_DATA_SIDS');
+		
+	IF Left(vG.Sys.Extract.SAPSQLCube.DimFieldNames,4)='SID_' then 
+		LET vG.Sys.Extract.SAPSQLCube.DimString = SubField(vG.Sys.Extract.SAPSQLCube.DimFieldNames,'SID_',2);
+		
+		IF Left(vG.Sys.Extract.SAPSQLCube.DimString,1) = '0' then
+		
+			LET vG.Sys.Extract.SAPSQLCube.MasterData = Mid(vG.Sys.Extract.SAPSQLCube.DimString,2,Len(vG.Sys.Extract.SAPSQLCube.DimString));
+			LET vG.Sys.Extract.SAPSQLCube.Domain = 'BI0';
+			
+		ELSE
+			LET vG.Sys.Extract.SAPSQLCube.MasterData = vG.Sys.Extract.SAPSQLCube.DimString;
+			LET vG.Sys.Extract.SAPSQLCube.Domain = 'BIC';
+		ENDIF
+		
+		///Definig variables to check later if Associated Tables for Master Data: S (SID), P (Master data) and T (Text) exist in the SAP System. Table download above
+		LET vG.Sys.Extract.SAPSQLCube.MasterDataTable_S = '/$(vG.Sys.Extract.SAPSQLCube.Domain)/S$(vG.Sys.Extract.SAPSQLCube.MasterData)';
+		LET vG.Sys.Extract.SAPSQLCube.MasterDataTable_P = '/$(vG.Sys.Extract.SAPSQLCube.Domain)/P$(vG.Sys.Extract.SAPSQLCube.MasterData)';
+		LET vG.Sys.Extract.SAPSQLCube.MasterDataTable_T = '/$(vG.Sys.Extract.SAPSQLCube.Domain)/T$(vG.Sys.Extract.SAPSQLCube.MasterData)';
+		
+		//Checking different types of tables that exists for each attribute
+		SYS_SAP_TABLES_MASTER_DATA_TOLOAD_AUX:
+		LOAD _SAPTabName,
+		Left(_SAPTabName,5) as _SAPDomain,
+		'$(vG.Sys.Extract.SAPSQLCube.DimFieldNames)' as _SAPSID,
+		'$(vG.Sys.Extract.SAPSQLCube.MasterData)' as _SAPObjectName,
+		_SAPTableType_S,
+		_SAPTableType_P,
+		_SAPTableType_T,
+		_SAPTableTypeCount
+		Where _SAPTableType_S =1  or _SAPTableType_P = 1 or _SAPTableType_T = 1;
+		LOAD TABNAME as _SAPTabName, 
+		WildMatch(TABNAME,'*$(vG.Sys.Extract.SAPSQLCube.MasterDataTable_S)') as _SAPTableType_S,
+		WildMatch(TABNAME,'*$(vG.Sys.Extract.SAPSQLCube.MasterDataTable_P)') as _SAPTableType_P,
+		WildMatch(TABNAME,'*$(vG.Sys.Extract.SAPSQLCube.MasterDataTable_T)') as _SAPTableType_T,
+		1 as _SAPTableTypeCount
+		Resident SYS_SAP_TABLES;
+		
+					
+	ELSE
+		
+	ENDIF
+
+NEXT vG.Sys.Extract.SAPSQLCube.DimFields
+
+
+//Defining a matrix where for each attribute it is identified the tables to be downloaded
+SYS_SAP_TABLES_MASTER_DATA_TOLOAD:
+LOAD _SAPDomain,
+_SAPObjectName,
+_SAPSID,
+Max(_SAPTableType_S) as _SAPTableType_S,
+Max(_SAPTableType_P) as _SAPTableType_P,
+Max(_SAPTableType_T) as _SAPTableType_T,
+Sum(_SAPTableTypeCount) as _SAPTableTypeTotal
+Resident SYS_SAP_TABLES_MASTER_DATA_TOLOAD_AUX
+Group By _SAPDomain, _SAPObjectName, _SAPSID;
+
+DROP Table SYS_SAP_TABLES_MASTER_DATA_TOLOAD_AUX;
+
+
+// Extraction of Master Data
+LET vG.Sys.Extract.SAPSQLCube.Total.SAPObjectName = FieldValueCount('_SAPObjectName');
+
+FOR vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName = 1 to $(vG.Sys.Extract.SAPSQLCube.Total.SAPObjectName)
+
+	LET vG.Sys.Extract.SAPSQLCube.SAPObjectName = Peek('_SAPObjectName',$(vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName)-1,'SYS_SAP_TABLES_MASTER_DATA_TOLOAD');
+	LET vG.Sys.Extract.SAPSQLCube.SAPDomain = Peek('_SAPDomain',$(vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName)-1,'SYS_SAP_TABLES_MASTER_DATA_TOLOAD');
+	LET vG.Sys.Extract.SAPSQLCube.SAPSID = Peek('_SAPSID',$(vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName)-1,'SYS_SAP_TABLES_MASTER_DATA_TOLOAD');
+    LET vG.Sys.Extract.SAPSQLCube.SAPObjectType_S = Peek('_SAPTableType_S',$(vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName)-1,'SYS_SAP_TABLES_MASTER_DATA_TOLOAD');
+    LET vG.Sys.Extract.SAPSQLCube.SAPObjectType_P = Peek('_SAPTableType_P',$(vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName)-1,'SYS_SAP_TABLES_MASTER_DATA_TOLOAD');
+    LET vG.Sys.Extract.SAPSQLCube.SAPObjectType_T = Peek('_SAPTableType_T',$(vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName)-1,'SYS_SAP_TABLES_MASTER_DATA_TOLOAD');
+	
+	
+	M_$(vG.Sys.Extract.SAPSQLCube.SAPObjectName):
+	LOAD *, SID as $(vG.Sys.Extract.SAPSQLCube.SAPSID);
+	SELECT * From $(vG.Sys.Extract.SAPSQLCube.SAPDomain)S$(vG.Sys.Extract.SAPSQLCube.SAPObjectName);
+	DROP Field SID;
+
+	
+	IF vG.Sys.Extract.SAPSQLCube.SAPObjectType_P = 1 then
+	
+		Left Join (M_$(vG.Sys.Extract.SAPSQLCube.SAPObjectName))
+		SELECT * From $(vG.Sys.Extract.SAPSQLCube.SAPDomain)M$(vG.Sys.Extract.SAPSQLCube.SAPObjectName);
+		
+	ELSE
+	ENDIF
+	
+	IF vG.Sys.Extract.SAPSQLCube.SAPObjectType_T = 1 then
+				
+		Left Join (M_$(vG.Sys.Extract.SAPSQLCube.SAPObjectName))
+		SELECT * From $(vG.Sys.Extract.SAPSQLCube.SAPDomain)T$(vG.Sys.Extract.SAPSQLCube.SAPObjectName);
+		//Where LANGU = 'E'; Language for materials will be check on the loading process
+    
+    ELSE
+	ENDIF
+    
+    
+    RENAME Fields using SYS_MAP_INFO_OBJECTS;
+	
+	STORE M_$(vG.Sys.Extract.SAPSQLCube.SAPObjectName) into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)/$(vG.Sys.Path.QVD.Master.Data)/M_$(vG.Sys.Extract.SAPSQLCube.SAPObjectName).qvd;
+	DROP Table M_$(vG.Sys.Extract.SAPSQLCube.SAPObjectName);
+
+NEXT vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName
+
+DROP Table MASTER_DATA_SIDS;
+
+LET vG.Sys.Extract.SAPSQLCube.NumOfExtractor = null();
+LET vG.Sys.Extract.SAPSQLCube.CountExtractor = null();
+LET vG.Sys.Extract.SAPSQLCube.Extractor = null();
+LET vG.Sys.Extract.SAPSQLCube.DimNumOfFields = null();
+LET vG.Sys.Extract.SAPSQLCube.DimFields = null();
+LET vG.Sys.Extract.SAPSQLCube.DimFieldNames = null();
+LET vG.Sys.Extract.SAPSQLCube.DimString = null();
+LET vG.Sys.Extract.SAPSQLCube.MasterData = null();
+LET vG.Sys.Extract.SAPSQLCube.Domain = null();
+LET vG.Sys.Extract.SAPSQLCube.MasterDataTable_T = null();
+LET vG.Sys.Extract.SAPSQLCube.MasterDataTable_P = null();
+LET vG.Sys.Extract.SAPSQLCube.MasterDataTable_S = null();
+LET vG.Sys.Extract.SAPSQLCube.Total.SAPObjectName = null();
+LET vG.Sys.Extract.SAPSQLCube.Count.SAPObjectName = null();
+LET vG.Sys.Extract.SAPSQLCube.SAPObjectName = null();
+LET vG.Sys.Extract.SAPSQLCube.SAPDomain = null();
+LET vG.Sys.Extract.SAPSQLCube.SAPSID = null();
+LET vG.Sys.Extract.SAPSQLCube.SAPObjectType_S = null();
+LET vG.Sys.Extract.SAPSQLCube.SAPObjectType_P = null();
+LET vG.Sys.Extract.SAPSQLCube.SAPObjectType_T = null();

@@ -1,0 +1,30 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////// (APP) Self Service INLINES   //////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Dimensions to use based on the ones settled in the KPIs excel with PROD indicator=1
+%HIDE_Dimensions:
+LOAD DIMENSION_COD		as	%HIDE_DIMENSION_COD,
+     DIMENSION			as	%HIDE_DIMENSION,
+     DIMENSION_PARENT	as	%HIDE_DIMENSION_PARENT,
+     DIMENSION_DESC		as	%HIDE_DIMENSION_DESC,
+     DIMENSION_LABEL 	as   %HIDE_DIMENSION_LABEL
+FROM
+$(vG.Sys.Path.Config.Variables.KPIs)$(vG.Sys.Doc.KPIs.Name.PROD)
+(ooxml, embedded labels, table is $(vG.Sys.Doc.KPIs.Sheet.SelfService.Dim))
+WHERE PROD=1;
+
+//KPIs to use based on the ones settled in the KPIs excel with PROD indicator=1
+%HIDE_KPIs:
+LOAD KPI_COD			as	%HIDE_KPI_COD,
+     KPI_LABEL			as	%HIDE_KPI_LABEL,
+     KPI_PARENT		as	%HIDE_KPI_PARENT,
+     KPI_DESC			as	%HIDE_KPI_DESC,
+     KPI_LABEL_VALUE 	as   %HIDE_KPI_LABEL_VALUE,
+     KPI_FORMULA		as	%HIDE_KPI_FORMULA,
+	STATUS			as   %HIDE_KPI_STATUS,
+     FORMAT			as	%HIDE_FORMAT
+FROM
+$(vG.Sys.Path.Config.Variables.KPIs)$(vG.Sys.Doc.KPIs.Name.PROD)
+(ooxml, embedded labels, table is $(vG.Sys.Doc.KPIs.Sheet.SelfService.KPI))
+WHERE PROD=1;

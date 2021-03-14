@@ -1,0 +1,151 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD Flat Files tables from business area
+//----------------------------------------------------------------------------------------------
+//Example: call _load_Flat_Files(_CubeArea)
+//This function loads al the flat files from the indicated business Area
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_cubeArea: Analitical area (currently Demand or Inventory)
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+sub _load_Flat_Files(_CubeArea,_MetaDoc,_MetaSheet)
+
+	//Load meta tables info just for conversions FF
+	SYS_METADATA_TABLES:
+	LOAD Meta_Table_Name,
+	     Meta_Store_Path,
+	     Last_stored_Layer,
+	     //Entity_Doc,
+	     Historical_Vision,
+	     Table_Type,
+	     Source_Id
+	FROM
+	[$(vG.Sys.Path.Config.Metadata)$(_MetaDoc)]
+	(ooxml, embedded labels, table is $(_MetaSheet))
+	//Only the ones must be loaded (star o concatenate ones) from the specific domain
+	WHERE Load_Indicator='Yes' and Functional_Domain='$(_CubeArea)' and (Table_Type='Concatenate' or Table_Type='Star');
+	
+	//Count the number of flat files to Load
+	LET vG.Sys.FlatFiles.TotalFilesToLoad = FieldValueCount('Meta_Table_Name');
+	
+	FOR vG.Sys.FlatFiles.CountFilesToLoad = 0 to  ($(vG.Sys.FlatFiles.TotalFilesToLoad)-1)
+	
+		//Read the details of the Table to Load
+		LET vG.Sys.FlatFiles.QVDName = Peek('Meta_Table_Name', $(vG.Sys.FlatFiles.CountFilesToLoad), 'SYS_METADATA_TABLES'); 	//QVD Name
+		LET vG.Sys.FlatFiles.QVDPath = Peek('Meta_Store_Path', $(vG.Sys.FlatFiles.CountFilesToLoad), 'SYS_METADATA_TABLES');	//Store path of the base QVD	
+		//LET vG.Sys.FlatFiles.TableName = Peek('Entity_Doc', $(vG.Sys.FlatFiles.CountFilesToLoad), 'SYS_METADATA_TABLES');		//Name of the base table	
+		LET vG.Sys.FlatFiles.TableType = Peek('Table_Type', $(vG.Sys.FlatFiles.CountFilesToLoad), 'SYS_METADATA_TABLES');		//Table type (star / concatenate)
+		LET vG.Sys.FlatFiles.SourceId = Peek('Source_Id', $(vG.Sys.FlatFiles.CountFilesToLoad), 'SYS_METADATA_TABLES');			//Source Id of the data to load (just for the concatenate ones)	
+
+		//Create table prefix depending on the table type (star table + qualified fields or concatenate facts load)
+		LET vG.Sys.FlatFiles.TablePrefix = if('$(vG.Sys.FlatFiles.TableType)'='Star',replace('$(vG.Sys.FlatFiles.QVDName):','FF_',''),'CONCATENATE (FACTS_JSC) ');
+		
+		//Create source ID field, applying only for concatenate types
+		LET vG.Sys.FlatFiles.SourceId = if('$(vG.Sys.FlatFiles.SourceId)'<>'NA',', $(vG.Sys.FlatFiles.SourceId) as SOURCE_ID','//');
+
+	    LET vG.Sys.FlatFiles.Layer = Peek('Last_stored_Layer', $(vG.Sys.FlatFiles.CountFilesToLoad), 'SYS_METADATA_TABLES');			//Layer where QVD mis stored
+	    LET vG.Sys.FlatFiles.HistoricalVision = Peek('Historical_Vision', $(vG.Sys.FlatFiles.CountFilesToLoad), 'SYS_METADATA_TABLES');	//Historical Vision: Monthly, Yeraly, Not from file
+	    //Set QVD name plus path plus Layer
+	    IF '$(vG.Sys.FlatFiles.Layer)'='L2' THEN
+	    	LET vG.Sys.FlatFiles.QVD = replace('$(vG.Sys.FlatFiles.QVDPath)','$(vG.Sys.Path.QVD.Layer1)','$(vG.Sys.Path.QVD.Layer2)')&'$(vG.Sys.FlatFiles.QVDName)'&'_L2';
+		ELSE 
+			LET vG.Sys.FlatFiles.QVD = '$(vG.Sys.FlatFiles.QVDPath)$(vG.Sys.FlatFiles.QVDName)';
+		END IF;
+		
+		//If its a raw load, just load one QVD // if NOT or ACCUMULATIVE
+		IF vG.Sys.FlatFiles.HistoricalVision = 'Not' or vG.Sys.FlatFiles.HistoricalVision = 'Accumulative' or vG.Sys.FlatFiles.HistoricalVision = 'Actuals' then
+			IF FileSize('$(vG.Sys.FlatFiles.QVD).qvd') > 0 then
+		
+			$(vG.Sys.FlatFiles.TablePrefix)
+			LOAD * $(vG.Sys.FlatFiles.SourceId)
+			FROM $(vG.Sys.FlatFiles.QVD).qvd (qvd); 
+			
+			ENDIF;
+	
+		//If is a monthly based update, load all months in range
+		ELSEIF vG.Sys.FlatFiles.HistoricalVision = 'Monthly' then
+		
+		LET vG.Sys.FlatFiles.DateToday = Today()-1;
+		LET vG.Sys.FlatFiles.DateEnd = Num(MakeDate(Year($(vG.Sys.FlatFiles.DateToday)), Num(Month($(vG.Sys.FlatFiles.DateToday)))));
+		LET vG.Sys.FlatFiles.DateIni = Num(AddMonths(vG.Sys.FlatFiles.DateEnd,-36));
+			
+			DO while vG.Sys.FlatFiles.DateIni <= $(vG.Sys.FlatFiles.DateEnd)
+				
+				LET vG.Sys.FlatFiles.YearMonthIni = Year($(vG.Sys.FlatFiles.DateIni))&Num(Month($(vG.Sys.FlatFiles.DateIni)),'00');
+			
+				LET vG.Sys.FlatFiles.QVDMonth = '$(vG.Sys.FlatFiles.QVD)_$(vG.Sys.FlatFiles.YearMonthIni).qvd';
+				
+				IF FileSize('$(vG.Sys.FlatFiles.QVDMonth)') > 0 then
+				$(vG.Sys.FlatFiles.TablePrefix)
+				LOAD * $(vG.Sys.FlatFiles.SourceId)
+				FROM $(vG.Sys.FlatFiles.QVDMonth) (qvd);
+				ENDIF;
+		
+				LET vG.Sys.FlatFiles.DateIni = Num(AddMonths(vG.Sys.FlatFiles.DateIni,1));
+			
+			LOOP
+		
+		//If is a yearly based update, call function for each year
+		ELSEIF vG.Sys.FlatFiles.HistoricalVision = 'Yearly' then
+		
+		LET vG.Sys.FlatFiles.DateToday = Today()-1;
+		LET vG.Sys.FlatFiles.DateEnd = Year($(vG.Sys.FlatFiles.DateToday));
+		LET vG.Sys.FlatFiles.DateIni = Year($(vG.Sys.FlatFiles.DateToday))-3;
+			
+			DO while vG.Sys.FlatFiles.DateIni <= $(vG.Sys.FlatFiles.DateEnd)
+					
+				LET vG.Sys.FlatFiles.QVDYear = '$(vG.Sys.FlatFiles.QVD)_$(vG.Sys.FlatFiles.DateIni).qvd';
+				
+				IF FileSize('$(vG.Sys.FlatFiles.QVDYear)') > 0 then
+				$(vG.Sys.FlatFiles.TablePrefix)
+				LOAD * $(vG.Sys.FlatFiles.SourceId)
+				FROM $(vG.Sys.FlatFiles.QVDYear) (qvd);
+				ENDIF;
+				
+				LET vG.Sys.FlatFiles.DateIni = vG.Sys.FlatFiles.DateIni + 1;
+			
+			LOOP
+
+     ///////////////////  'Accumulative' was added  to 'Not'  ///////////////////////////////////////////////
+     //			//ELSEIF vG.Sys.FlatFiles.HistoricalVision = 'Accumulative' then                           //
+     //																			                           //
+     //			IF FileSize('$(vG.Sys.FlatFiles.QVD).qvd') > 0 then                                        //
+     //																							           //
+     //			$(vG.Sys.FlatFiles.TablePrefix)						                                       //
+	 //			LOAD * $(vG.Sys.FlatFiles.SourceId) 							                           //
+     //			FROM $(vG.Sys.FlatFiles.QVD).qvd (qvd); 						                           //
+	 //																			                           //
+	 //			ENDIF;															                           //
+     ////////////////////////////////////////////////////////////////////////////////////////////////////////		
+				
+		
+		ENDIF
+		
+	NEXT vG.Sys.FlatFiles.CountFilesToLoad;
+	
+	//Drop used Variables & Tables
+	DROP TABLE SYS_METADATA_TABLES;
+	LET vG.Sys.FlatFiles.DateIni = null();
+	LET vG.Sys.FlatFiles.QVDYear = null();
+	LET vG.Sys.FlatFiles.DateEnd = null();
+	LET vG.Sys.FlatFiles.HistoricalVision = null();
+	LET vG.Sys.FlatFiles.QVDMonth = null();
+	LET vG.Sys.FlatFiles.YearMonthIni = null();
+	LET vG.Sys.FlatFiles.DateToday = null();
+	LET vG.Sys.FlatFiles.QVD = null();
+	LET vG.Sys.FlatFiles.QVDPath = null();
+	LET vG.Sys.FlatFiles.QVDName = null();
+	LET vG.Sys.FlatFiles.HistoricalVision = null();
+	LET vG.Sys.FlatFiles.Layer = null();
+	LET vG.Sys.FlatFiles.CountFilesToLoad = null();
+	LET vG.Sys.FlatFiles.TotalFilesToLoad = null();
+	LET _CubeArea = null();
+	LET vG.Sys.FlatFiles.TablePrefix = null();
+	LET vG.Sys.FlatFiles.SourceId = null();
+	LET vG.Sys.FlatFiles.SourceId = null();
+	LET _MetaDoc = null();
+	LET _MetaSheet = null();
+
+end sub;

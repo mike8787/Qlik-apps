@@ -1,0 +1,263 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD SAP cubes L2
+//----------------------------------------------------------------------------------------------
+//Example: call _load_SAP_Cubes_L2(_vQvdToExtract,_Metadata,_MetadataSheetDim,_MetadataSheetFields,_MetadataPath,_QvdFolder)
+//This function Generates Layer.2 SAP qvds based on the ones from Layer.1, renaming fields and rolling simple dimensions
+//via applymap based on the specifications settled in excel Janssen.GLOBAL.Metadata.SAP
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_vQvdToExtract : SAP cube to use
+//_Metadata : Metadata excel name
+//_MetadataSheetDim : Metadata excel dim sheet
+//_MetadataSheetFields : metadata excel fields sheet
+//_MetadataPath : Metadata excel path to
+//_QvdFolder : Qvd Folder in Layer.2 where generated Qvd must be stored
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+SUB _load_SAP_Cubes_L2(_vQvdToExtract,_Metadata,_MetadataSheetDim,_MetadataSheetFields,_MetadataPath,_QvdFolder)
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 1: Prepare all the mappings tables containing the desired Dim attributes
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	//Load mapping tables info from excel
+	SYS_APPLYMAP_TABLES:
+	LOAD 
+		Field_ID,
+		Dim_Id,
+		Master_Table,
+		Mapping_Field_In,		
+		Mapping_Field_Out
+	     
+	FROM
+	[$(_MetadataPath)$(_Metadata)]
+	(ooxml, embedded labels, table is $(_MetadataSheetDim))
+	WHERE $(_vQvdToExtract)=1 and Active='Yes' and Loading_Type='Mapping';
+	
+	//Count the number of MAPPING tables to Load
+	LET vSys.Total.FilesToLoad = FieldValueCount('Dim_Id');
+	
+	//Create the different mapping tables
+	FOR vSys.Count.FilesToLoad=0 to ($(vSys.Total.FilesToLoad)-1)
+	
+		//Read the details of the Table to Load
+		LET vSys.Mapp.table = Peek('Master_Table', vSys.Count.FilesToLoad, 'SYS_APPLYMAP_TABLES'); 			//Master QVD name
+		LET vSys.Mapp.Name = Peek('Field_ID', vSys.Count.FilesToLoad, 'SYS_APPLYMAP_TABLES'); 				//Cube Field Name
+		LET vSys.Mapp.ID = Peek('Mapping_Field_In', vSys.Count.FilesToLoad, 'SYS_APPLYMAP_TABLES'); 		//Mapping ID
+		LET vSys.Mapp.DES = Peek('Mapping_Field_Out', vSys.Count.FilesToLoad, 'SYS_APPLYMAP_TABLES');		//Mapping Desc
+		LET vSys.Mapp.DimID = Peek('Dim_Id', vSys.Count.FilesToLoad, 'SYS_APPLYMAP_TABLES');				//Mapping Desc
+		
+		$(vSys.Mapp.Name)$(_vQvdToExtract)$(vSys.Mapp.DimID):
+		MAPPING LOAD $(vSys.Mapp.ID) as  $(vSys.Mapp.Name)_$(vSys.Count.FilesToLoad)_ID,
+			 		 $(vSys.Mapp.DES) as $(vSys.Mapp.Name)_$(vSys.Count.FilesToLoad)_IND
+		FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Master.Data)$(vSys.Mapp.table).qvd (qvd);
+		
+	NEXT vSys.Count.FilesToLoad;
+	
+	DROP TABLE SYS_APPLYMAP_TABLES;
+		
+		
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 2: Set text variable containing the apply maps fields
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//We do it in two steps since it seems that sometimes there are issues with the server processor balancing processes (maybe because we are using too mani strings concatenations)
+	SYS_APPLYMAP_SENTENCES_AUX:
+	LOAD 
+		'ApplyMap('&chr(39)&Field_ID&'$(_vQvdToExtract)'&Dim_Id&chr(39)&','&Field_ID&',0) as  ' & Field_Alias as ApplyMapSentencesAux
+	     
+	FROM
+	[$(_MetadataPath)$(_Metadata)]
+	(ooxml, embedded labels, table is $(_MetadataSheetDim))
+	WHERE $(_vQvdToExtract)=1 and Active='Yes' and Loading_Type='Mapping';
+	
+	SYS_APPLYMAP_SENTENCES:
+	LOAD concat(ApplyMapSentencesAux, ',') as ApplyMapSentences
+	Resident SYS_APPLYMAP_SENTENCES_AUX;
+    
+    	DROP TABLE SYS_APPLYMAP_SENTENCES_AUX;
+	
+	LET vApplyMapSentences = Peek('ApplyMapSentences', 0, 'SYS_APPLYMAP_SENTENCES');
+	
+	DROP TABLE SYS_APPLYMAP_SENTENCES;
+	
+	
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 3: Set variable containing all the dimensions to load from the desired Cube (not in mappings)
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	SYS_FIELD_SENTENCES:
+	LOAD 
+		concat('['&Field_ID&']', ',') as FieldSentences
+	     
+	FROM
+	[$(_MetadataPath)$(_Metadata)]
+	(ooxml, embedded labels, table is $(_MetadataSheetDim))
+	WHERE Active='Yes' and Loading_Type<>'Mapping' and $(_vQvdToExtract)=1;
+	
+	LET vFieldSentences = Peek('FieldSentences', 0, 'SYS_FIELD_SENTENCES');
+	
+	DROP TABLE SYS_FIELD_SENTENCES;
+	
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 4: Set variable containing all the fields
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	SYS_METRIC_SENTENCES:
+	LOAD 
+		concat(Figure, ',') as MetricSentences
+	     
+	FROM
+	[$(_MetadataPath)$(_Metadata)]
+	(ooxml, embedded labels, table is $(_MetadataSheetFields))
+	WHERE Active='Yes' and $(_vQvdToExtract)=1;
+	
+	LET vMetricSentences = Peek('MetricSentences', 0, 'SYS_METRIC_SENTENCES');
+	
+	DROP TABLE SYS_METRIC_SENTENCES;
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 5: Set variable containing the where clausule
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	SYS_METRIC_SENTENCES:
+	LOAD 
+		concat(Where_Clausule, ' AND ') as WhereSentence
+	     
+	FROM
+	[$(_MetadataPath)$(_Metadata)]
+	(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Where))
+	WHERE $(_vQvdToExtract)=1;
+	
+	LET vWhereSentence = Peek('WhereSentence', 0, 'SYS_METRIC_SENTENCES');
+	TRACE $(vWhereSentence);
+	DROP TABLE SYS_METRIC_SENTENCES;
+	
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 6: Load qvds, mapping simple dimensions and delete overwriten fields
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	TRACE $(_vQvdToExtract);
+	$(_vQvdToExtract)_L1.5:
+	LOAD $(vFieldSentences),
+		$(vMetricSentences),
+		 $(vApplyMapSentences)
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(_QvdFolder)$(_vQvdToExtract).qvd (qvd)
+	;
+	
+	//Store created table
+	STORE $(_vQvdToExtract)_L1.5 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L1.5.qvd (qvd);
+	DROP TABLE $(_vQvdToExtract)_L1.5;
+		
+	
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Extraction Step 7: RE-Load previous QVD | Set Date| Apply where sentence based on the Date field
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	// Set date filters for the cubes as today()-36
+	LET vSys.Date.Filter.Ini = Year(Addmonths(today(),-12))&'0001';
+	LET vSys.Date.Filter.End = Year(Addmonths(today(),36))&'0001';
+	LEt vSys.Date.Filter.Ini.YearWeek = Year(Addmonths(today(),-36))&Num(Month(Addmonths(today(),-36)), '00');
+	
+	//If is a Inventory Cube, set Date format
+	IF '$(_QvdFolder)'='Inventory\' then
+	
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		//Load & Store QVD for the Inventory Dashboard (MONTH LEVEL)
+		$(_vQvdToExtract)_L2:
+		LOAD *,
+			//Asign the relating date
+			if(NUM(applymap('MAPP_WEEK_MONTH_EQ_PROJ',NUM(right([Calendar year / week],2),'00'),0))=12,
+				(left([Calendar year / week],4)-1)&NUM(applymap('MAPP_WEEK_MONTH_EQ_PROJ',NUM(right([Calendar year / week],2),'00'),0),'00')&'01',
+				left([Calendar year / week],4)&NUM(applymap('MAPP_WEEK_MONTH_EQ_PROJ',NUM(right([Calendar year / week],2),'00'),0),'00')&'01') as Date
+			
+		FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L1.5.qvd (qvd)
+		//Just the weeks whose result will be asigned to months and are higher than today - 36 months. We also apply the field filters detailed in SAP Metadata
+		WHERE applymap('MAPP_WEEK_MONTH_IND',NUM(right([Calendar year / week],2),'00'),'0')<>'0' AND
+		$(vWhereSentence) and [Calendar year / week]>$(vSys.Date.Filter.Ini.YearWeek)
+		;
+		
+		//Re Store created table
+		STORE $(_vQvdToExtract)_L2 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L2.qvd (qvd);
+		DROP TABLE $(_vQvdToExtract)_L2;
+		
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		//For inventory cubes, set variable for system cost flag in E2E
+		if '$(_vQvdToExtract)'<>'F_E2E_DEMAND' then
+			LET v.Sys.UseOfFlag = ' ' ;
+		else
+			LET v.Sys.UseOfFlag = '//';
+		ENDIF;
+		
+		//Load & Store QVD for the Inventory Dashboard (week LEVEL)
+		$(_vQvdToExtract)_E2E_L2:
+		LOAD *,
+			//Asign the relating Month as Date
+			if(NUM(applymap('MAPP_WEEK_MONTH_EQ_PROJ',NUM(right([Calendar year / week],2),'00'),0))=12,
+				(left([Calendar year / week],4)-1)&NUM(applymap('MAPP_WEEK_MONTH_EQ_PROJ',NUM(right([Calendar year / week],2),'00'),0),'00')&'01',
+				left([Calendar year / week],4)&NUM(applymap('MAPP_WEEK_MONTH_EQ_PROJ',NUM(right([Calendar year / week],2),'00'),0),'00')&'01') as Date,
+				left([Calendar year / week],4)	as Year,
+				$(v.Sys.UseOfFlag) if([Stock Value @ Inventory (USD)]=0 and [Global Inventory Qty]>0,1,0)	as	FLAG_SYS_COST_RELATED,
+				right([Calendar year / week],2)	as	Week
+			
+		FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L1.5.qvd (qvd)
+		//Just the weeks that are higher than today - 36 months. We also apply the field filters detailed in SAP Metadata
+		WHERE $(vWhereSentence) and [Calendar year / week]>$(vSys.Date.Filter.Ini.YearWeek)
+		;
+		
+		//Re Store created table
+		STORE $(_vQvdToExtract)_E2E_L2 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_E2E_L2.qvd (qvd);
+		DROP TABLE $(_vQvdToExtract)_E2E_L2;
+		
+	//If is from Demand, set Date Format
+	ELSEIF  '$(_QvdFolder)'='Demand\' then 
+
+		$(_vQvdToExtract)_L2:
+		LOAD *,
+			//Asign the relating date
+			[Fiscal year Period] as Date
+			
+		FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L1.5.qvd (qvd) 
+		// Date filter (Last 36 monhts)
+		WHERE $(vWhereSentence) and [Fiscal year Period]>$(vSys.Date.Filter.Ini) and [Fiscal year Period]<$(vSys.Date.Filter.End); 
+		
+		//Re Store created table
+		DROP Field [Fiscal year Period];
+		STORE $(_vQvdToExtract)_L2 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L2.qvd (qvd);
+		DROP TABLE $(_vQvdToExtract)_L2;
+		
+		//Default		
+		ELSE
+			$(_vQvdToExtract)_L2:
+			LOAD *
+			FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L1.5.qvd (qvd);
+			
+			STORE $(_vQvdToExtract)_L2 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_QvdFolder)$(_vQvdToExtract)_L2.qvd (qvd);
+			DROP TABLE $(_vQvdToExtract)_L2;
+			
+
+	ENDIF;
+
+	//Delete used function variables
+	LET vApplyMapSentences = null();
+	LET vFieldSentences = null();
+	LET vMetricSentences = null();
+	LET _vQvdToExtract = null();
+	LET _MetadataPath = null();
+	LET _Metadata = null();
+	LET _QvdFolder = null();
+	LET _MetadataSheetDim = null();
+	LET vSys.Total.FilesToLoad = null();
+	LET k= null();
+	LET vSys.Mapp.table = null();
+	LET vSys.Mapp.Name  = null();
+	LET vSys.Mapp.ID  = null();
+	LET vSys.Mapp.DES  = null();
+	LET vWhereSentence = null();
+	LET vSys.Date.Filter.Ini = null();
+	LET vSys.Date.Filter.Ini.YearWeek = null();
+	LET v.Sys.UseOfFlag = null();
+	LET vSys.Date.Filter.End = null();
+	
+END SUB;
+

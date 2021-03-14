@@ -1,0 +1,34 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION SYS SAP STANDARD DIMENSION (EG. MATERIAL, CUSTOMER,DOC_NUMBER)
+//----------------------------------------------------------------------------------------------
+//This function loads standard dimensions, to allow parallel loading
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+Sub _load_sys_sapbw_standard_dim_master_extractor(_standarddim)
+
+LET vG.Sys.Extract.Customer.Langu = If (_standarddim = 'CUSTOMER', '//',null());
+
+	M_$(_standarddim):
+	LOAD *, SID as SID_0$(_standarddim);
+	SELECT * From /BI0/S$(_standarddim);
+	DROP Field SID;
+
+	
+	Left Join (M_$(_standarddim))
+	SELECT * From /BI0/M$(_standarddim);
+				
+	Left Join (M_$(_standarddim))
+	SELECT * From /BI0/T$(_standarddim)
+	$(vG.Sys.Extract.Customer.Langu) Where LANGU = 'E'
+	;
+        
+    	RENAME Fields using SYS_MAP_INFO_OBJECTS;
+	
+	STORE M_$(_standarddim) into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Path.QVD.Master.Data)\M_$(_standarddim).qvd;
+	DROP Table M_$(_standarddim);
+
+LET vG.Sys.Extract.Customer.Langu = null();
+
+End Sub;

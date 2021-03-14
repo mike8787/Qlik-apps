@@ -1,0 +1,60 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION Drop unused fact fields from SAP CUBES
+//----------------------------------------------------------------------------------------------
+//Example: call _drop_unused_cube_fields(_CubeArea)
+//This function drops all the unused fields in SAP cubes from the indicated business Area
+//=all fields that are beeing loaded (Active=yes) but not treated (cube indicator = 2)
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_cubeArea: Analitical area (currently Demand or Inventory)
+//_InQlikMartField: name of the inQlikMart column to be used from the metadata excel (cubes)
+//_ActiveField: name of the Active field colum to be used from the metadata excel (master dim)
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+sub _drop_unused_cube_fields(_CubeArea,_InQlikMartField,_ActiveField)
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////
+	//1.) Read QVD info
+	SYS_CUBES_NAME_AND_LAYER:
+	LOAD '('&concat(Object_Name&'=2',' and ')&')' as AreaCubes
+	FROM
+	[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SAP.Name)]
+	(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Cubes))
+	//Just stored cubes from _CubeArea
+	WHERE $(_InQlikMartField)='Yes' and not isnull(Last_stored_Layer) and Extractor_Type='$(_CubeArea)';
+	
+	//Set variable containing cubes names
+	LET vSys.CubeNames = Peek('AreaCubes', 0, 'SYS_CUBES_NAME_AND_LAYER'); 
+	TRACE $(vSys.CubeNames);
+	
+	//Drop table
+	DROP TABLE SYS_CUBES_NAME_AND_LAYER;
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////
+	//2.) Now load not loading fields info from relating excel SAP metadata
+	SYS_CUBES_NAME_AND_LAYER:
+	LOAD concat(Field_ID,',') as DropFieldSentence
+	FROM
+	[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SAP.Name)]
+	(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Dim))
+	//Just stored cubes from the area cubes
+	WHERE ( $(_ActiveField)='Yes' and $(vSys.CubeNames) and Loading_Type<>'Mapping');
+	
+	//Set variable containing cubes names
+	LET vSys.DropFields = 'DROP FIELDS '&Peek('DropFieldSentence', 0, 'SYS_CUBES_NAME_AND_LAYER')&';'; 
+	TRACE $(vSys.DropFields);
+	
+	$(vSys.DropFields);
+		
+	//Drop used table
+	DROP TABLE SYS_CUBES_NAME_AND_LAYER;
+	
+	//Drop used variables
+	LET vSys.CubeNames =  null();
+	LET vSys.DropFields = null();
+	LET _InQlikMartField = null();
+	LET _ActiveField = null();
+
+end sub;

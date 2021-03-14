@@ -1,0 +1,71 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD SYS VARIABLES
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sys_variables(_docName,_sheetName,_environment)
+//This function loads variables located in _docName in _sheetName
+//
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+//the following structure: Fields: [Var Description LX],[Var Value]
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_docName: Excel document name
+//_sheetName: Excel sheet of the document
+//_environment: Column of the environment. For each environment there is a column with 0s and 1s
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_sys_variables(_docName,_sheetName,_environment)
+	//Variables load from excel file
+
+	IF isnull(_environment) THEN
+		LET _nullenvironment = '//';
+	END IF
+	
+	SYS_VARIABLES:
+	LOAD 
+		Trim([System Label]) as	SysVarName, 
+	        Trim([Var Value])  as SysVarValue
+	FROM [$(_docName)]
+	(ooxml, embedded labels, table is $(_sheetName))
+	$(_nullenvironment) WHERE $(_environment)=1
+	;
+	
+	//Count the number of Variables to Load
+	LET vSys.Total.VariablesToLoad = FieldValueCount('SysVarName');
+	
+	//Set variables from excel sys definition
+	FOR vSys.Count.VariablesToLoad = 0 To ($(vSys.Total.VariablesToLoad))
+	
+		//Read the details of the Table to Load
+		LET vSys.VariableToLoad = Peek('SysVarName', vSys.Count.VariablesToLoad, 'SYS_VARIABLES');
+		LET vSys.VariableValue = Peek('SysVarValue', vSys.Count.VariablesToLoad, 'SYS_VARIABLES');
+		
+		IF vSys.VariableValue <> '' Then
+			LET $(vSys.VariableToLoad) = $(vSys.VariableValue);
+		ELSE
+			LET $(vSys.VariableToLoad) = '';
+		ENDIF
+		
+	NEXT vSys.Count.VariablesToLoad; 	//Loop variables
+	
+
+	//Before deleting the table, we store the variables info in an aux table so later we can delete each variable
+	SYS_VARIABLES_INFO:
+	LOAD 	SysVarName 	    as SysVarName,
+		Left(SysVarName,6)  as SysVarType
+		//'$(_sheetName)'   as SysVarType
+
+	RESIDENT SYS_VARIABLES;
+
+	//Delete used variables y tables
+	LET vSys.Total.VariablesToLoad=null();
+	LET vSys.VariableToLoad = null();
+	LET vSys.VariableValue = null();
+	LET vSys.Count.VariablesToLoad = null();
+	LET _docName = null();
+	LET _sheetName = null();
+	LET _environment = null();
+	LET _nullenvironment = null();
+	DROP Table SYS_VARIABLES;
+End Sub;

@@ -1,0 +1,124 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD DATA MODEL
+//----------------------------------------------------------------------------------------------
+//Example: call _load_data_model(_docName,_sheetName)
+//This function built the data model for the FactsData of FFvsDF
+//
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+//the following structure: Fields: [Var Description LX],[Var Value]
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_docName: Excel document name
+//_sheetName: Excel sheet of the document
+//_loadType: Load periodicity
+//_loadDelta: Historical depth
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_data_model_facts(_docName,_sheetName)
+
+// Create table
+	Sys_Facts_Meta_Data:
+	LOAD *
+	FROM
+	[$(_docName)]
+	(ooxml, embedded labels, table is [$(_sheetName)])
+	WHERE [Table Type]='Fact' and Load_Indicator = '1';
+
+
+//Count total rows of the table
+LET vSys_Total_DataType = FieldValueCount('Functional_Domain');
+
+	FOR vSys_DataType = 0 TO $(vSys_Total_DataType)
+		
+		//Per each row whe extract the content of each field
+		LET vSys_Data_QvdPattern= Peek('Pattern',$(vSys_DataType), 'Sys_Master_Meta_Data');
+		LET vSys_Data_QvdPath= Peek('Path',$(vSys_DataType), 'Sys_Master_Meta_Data');
+		LET vSys_Data_DataModelTable= Peek('Data_Model_Table',$(vSys_DataType), 'Sys_Master_Meta_Data');
+		LET vSys_Data_LoadType= Peek('Load Type',$(vSys_DataType), 'Sys_Master_Meta_Data');
+		LET vSys_Data_LoadDelta= Peek('Load Delta',$(vSys_DataType), 'Sys_Master_Meta_Data');
+
+		if('$(vSys_Data_LoadType)'='Year') then
+
+		LET vSys_LoadIniDate = Date(AddMonths(Today(),$(vSys_Data_LoadDelta)));
+		LET vSys_LoadYearIni = Year(vSys_LoadIniDate);
+		LET vSys_LoadYearEnd = Year(Today())+1;
+
+		DO while vSys_LoadYearIni <= $(vSys_LoadYearEnd)
+
+			FOR EACH FILE IN FileList('$(vSys_Data_QvdPath)$(vSys_LoadYearIni)$(vSys_Data_QvdPattern)')
+
+				LET vG.Sys.Extract.FlatFiles.FileNameFFvsDF = SubField('$(FILE)','\',SubStringCount('$(FILE)','/')-1);
+		
+				Concatenate($(vSys_Data_DataModelTable))
+				LOAD  *
+				FROM [$(vSys_Data_QvdPath)$(vG.Sys.Extract.FlatFiles.FileNameFFvsDF)](qvd);
+   
+		
+			NEXT FILE;
+
+		LET vSys_LoadIniDate = AddYears(vSys_LoadIniDate,1);
+		LET vSys_LoadYearIni = Year(vSys_LoadIniDate);
+		LOOP;
+
+		elseif('$(vSys_Data_LoadType)'='YearMonth') then
+		
+		LET vSys_LoadIniDate = Date(AddMonths(Today(),$(vSys_Data_LoadDelta)));
+		LET vSys_LoadYearMonthIni = Year(vSys_LoadIniDate)&Num(Month(vSys_LoadIniDate), '00');
+		LET vSys_LoadMonthIni = Num(Month(vSys_LoadIniDate), '00');
+		LET vSys_LoadYearMonthEnd = Year(Today())&Num(Month(Today()), '00');
+	
+		DO while vSys_LoadYearMonthIni <= $(vSys_LoadYearMonthEnd)
+
+		FOR EACH FILE IN FileList('$(vSys_Data_QvdPath)$(vSys_LoadYearMonthIni)$(vSys_Data_QvdPattern)')
+
+		LET vG.Sys.Extract.FlatFiles.FileNameFFvsDF = SubField('$(FILE)','\',SubStringCount('$(FILE)','/')-1);
+		
+			Concatenate($(vSys_Data_DataModelTable))
+			LOAD  *
+			FROM [$(vSys_Data_QvdPath)$(vG.Sys.Extract.FlatFiles.FileNameFFvsDF)](qvd);
+   
+		
+		NEXT FILE;
+
+		LET vSys_LoadIniDate = Addmonths(vSys_LoadIniDate,1);
+		LET vSys_LoadYearMonthIni = Year(vSys_LoadIniDate)&Num(Month(vSys_LoadIniDate), '00');
+		LET vSys_LoadMonthIni = Num(Month(vSys_LoadIniDate), '00');
+						
+		LOOP;
+
+		else 
+		FOR EACH FILE IN FileList('$(vSys_Data_QvdPath)$(vSys_Data_QvdPattern)')
+
+		LET vG.Sys.Extract.FlatFiles.FileNameFFvsDF = SubField('$(FILE)','\',SubStringCount('$(FILE)','/')-1);
+		
+			Concatenate($(vSys_Data_DataModelTable))
+			LOAD  *
+			FROM [$(vSys_Data_QvdPath)$(vG.Sys.Extract.FlatFiles.FileNameFFvsDF)](qvd);
+   
+		
+		NEXT FILE;
+		
+
+		ENDIF
+		
+
+
+
+	NEXT vSys_DataType
+	
+	//Delete used variables and tables
+	LET _docName=null();
+	LET _sheetName=null();
+	LET vSys_Total_DataType=null();
+	LET vSys_DataType=null();
+	LET vSys_Data_QvdPattern=null();
+	LET vSys_Data_QvdPath=null();
+	LET vSys_Data_DataModelTable=null();
+	LET vG.Sys.Extract.FlatFiles.FileNameFFvsDF=null();
+	
+
+	DROP TABLE Sys_Facts_Meta_Data;
+    
+ End Sub;

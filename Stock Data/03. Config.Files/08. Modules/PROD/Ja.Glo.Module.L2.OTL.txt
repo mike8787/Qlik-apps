@@ -1,0 +1,129 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////// FACTS OTL //////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////
+// 1. Load OTL facts (only fields needed)
+F_OTL_AUX:
+LOAD 
+	 RowNo() as ROW_ID,
+	 //[Brand Name (Overall)], 
+     ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Brand Name (Per Market)])), ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Overall)])), 
+		ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Per Market)])), 
+			Upper(Trim([Brand Name (Per Market)]))))) as Brand,
+     Num([# of SKUs],'#') as Counter,
+     Country, 
+     [Launched On Time?],
+     if([Comment (Reason for Delay/Expedite/Etc.)]<>'',[Comment (Reason for Delay/Expedite/Etc.)]) as Comment
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.OTL)$(vG.Sys.Path.QVD.FlatFiles)OTL_FACTS.qvd]
+(qvd);
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+	Upper(Trim([Brand Name (Per Market)])) as [B.Original_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Brand Name (Per Market)])), ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Overall)])), 
+		ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Per Market)])), 
+			Upper(Trim([Brand Name (Per Market)]))))) as [B.Product_Brand],
+
+	ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Overall)])), 
+		ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Per Market)])), '')) as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Brand Name (Per Market)])),
+		ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Overall)])), 
+			ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand Name (Per Market)])), ''))) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+	ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim([Brand Name (Overall)])), 
+		ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim([Brand Name (Per Market)])), '')) as [B.Global_Brand],
+
+	ApplyMap('MAP_BRAND_LOCAL', Upper(Trim([Brand Name (Overall)])), 
+		ApplyMap('MAP_BRAND_LOCAL', Upper(Trim([Brand Name (Per Market)])), '')) as [B.Local_Brand],
+
+	'OTL Dashboard' as B.Metric_Origin,
+	'OTL' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.OTL)$(vG.Sys.Path.QVD.FlatFiles)OTL_FACTS.qvd]
+(qvd);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////////////////////////////////
+// 2. add country from OTL data model
+LEFT JOIN (F_OTL_AUX)
+LOAD Country, 
+     [G15 Country?]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.OTL)$(vG.Sys.Path.QVD.FlatFiles)FF_OTL_NL_ALIGN.qvd]
+(qvd)
+;
+
+///////////////////////////////////////////////////////////////////////////////////////
+// 2. add date and milestone from OTL data model and target and tolerance
+LEFT JOIN (F_OTL_AUX)
+LOAD ROW_ID, 
+     Date(Date#(Date,'YYYY-MM-DD'),'YYYYMM')&'01' as Date,
+     Year(Date) as Year,
+     Milestone
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.OTL)$(vG.Sys.Path.QVD.FlatFiles)OTL_MILESTONES.qvd]
+(qvd)
+;
+
+LEFT JOIN (F_OTL_AUX)
+LOAD 
+     Year,
+     Target,
+     Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.OTL)$(vG.Sys.Path.QVD.FlatFiles)FF_OTL_NL_TARGET.qvd]
+(qvd)
+where KPI='On Time Launch';
+
+///////////////////////////////////////////////////////////////////////////////////////
+// 3. make all necessary calculations: value and status
+
+F_OTL_AUX2:
+NoConcatenate
+LOAD Date,
+	 Brand,
+	 Only(Target) as Target,
+	 Only(Tolerance) as Tolerance,
+	 sum(if([Launched On Time?]='On-time',Counter,0)) as Actual,
+	 sum(if([Launched On Time?]='On-time',Counter,0))/sum(Counter) as Deviation
+	 ,Concat(Comment,chr(13)) as Comment
+	 //,concat(If(not IsNull(Comment), Country&': '&Comment),chr(13)) as Comment_aux
+Resident F_OTL_AUX
+Where [G15 Country?]='Yes' and Milestone='Planned First Sales'
+Group by Date, Brand;
+
+F_OTL:
+LOAD Date,
+	 Brand,
+	 Target,
+	 Tolerance,
+	 Actual,
+	 Deviation,
+	 //if(not IsNull(Target) and not IsNull(Actual), if(Actual>=Target, 2, if(Actual<Target and Actual>=Tolerance, 3, 4)), 1) as Status,
+	 $(v.StatusEvaluation(5, Deviation, Target, Tolerance)) as Status,
+	 Comment,
+	 10 as [KPI ID]
+Resident F_OTL_AUX2;
+
+Drop Tables F_OTL_AUX, F_OTL_AUX2;
+
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_OTL;
+DROP Table F_OTL;
+
+//STORE F_OTL into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_OTL.qvd];
+//DROP Table F_OTL;

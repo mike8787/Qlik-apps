@@ -1,0 +1,179 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION SYS SAP CUBES TO LOAD
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sys_sapbw_connection(_docName,_sheetName,_environment)
+//This function loads variables located in _docName in _sheetName
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+// the following structure: Fields: Source, Connection_String, Environment, User
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_sys_sapbw_cubes_extractor(_docName,_sheetName,_extractor)
+
+MASTER_DATA_SIDS:
+	LOAD * Inline [
+	_DUMMY_ID, _DUMMY
+	1, 1
+	];
+
+//Metadata from SAP Cubes. Infor related to Cube ID, Domain, Object Name
+
+SYS_CUBES:
+LOAD System_Label,
+     Object_ID,
+     Cube_Domain_ID,  
+     Object_Name, 
+     Object_Type, 
+     Extractor,
+     Extractor_Type, 
+     Description
+FROM [$(_docName)]
+(ooxml, embedded labels, table is $(_sheetName))
+Where Extractor = '$(_extractor)' AND Object_Type = 'cube';
+
+
+LET vG.Sys.Extract.SAPSQLCube.NumOfCubes = FieldValueCount('Object_ID');
+
+FOR vG.Sys.Extract.SAPSQLCube.CountCube = 1 to $(vG.Sys.Extract.SAPSQLCube.NumOfCubes)
+
+	LET vG.Sys.Extract.SAPSQLCube.CubeID = FieldValue('Object_ID', $(vG.Sys.Extract.SAPSQLCube.CountCube));
+    LET vG.Sys.Extract.SAPSQLCube.CubeName = FieldValue('Object_Name', $(vG.Sys.Extract.SAPSQLCube.CountCube));
+    LET vG.Sys.Extract.SAPSQLCube.ExtractorType = Peek('Extractor_Type', $(vG.Sys.Extract.SAPSQLCube.CountCube)-1, 'SYS_CUBES');
+	LET vG.Sys.Extract.SAPSQLCube.CubeDomain = Peek('Cube_Domain_ID', $(vG.Sys.Extract.SAPSQLCube.CountCube)-1, 'SYS_CUBES');
+	LET vG.Sys.Extract.SAPSQLCube.Package = 'KEY_$(vG.Sys.Extract.SAPSQLCube.CubeID)P';
+	
+	//Check if the Fact tables has already been extracted and set a flag indicating a delta load is possible
+	LET vG.Sys.Extract.SAPSQLCube.PackageExists = IsNull(QvdCreateTime('$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Extract.SAPSQLCube.ExtractorType)\$(vG.Sys.Extract.SAPSQLCube.CubeName)_PKGID.qvd'));  // if qvd exists then 0 else -1
+
+	TRACE Loading type is: $(vG.Sys.Extract.SAPSQLCube.LoadingType);
+	IF vG.Sys.Extract.SAPSQLCube.PackageExists = 0 AND vG.Sys.Extract.SAPSQLCube.LoadingType = 'Delta' then
+	
+		SYS_PACKAGES:
+		LOAD PKGID From $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Extract.SAPSQLCube.ExtractorType)\$(vG.Sys.Extract.SAPSQLCube.CubeName)_PKGID.qvd (qvd);
+		LET vG.Sys.Extract.SAPSQLCube.LastPackageID = Num(Peek('PKGID')) ;
+		DROP Table SYS_PACKAGES;
+		
+		// Where clause string for use in the select statement of the fact table
+		LET vG.Sys.Extract.SAPSQLCube.WhereString	= 'WHERE $(vG.Sys.Extract.SAPSQLCube.Package) > $(vG.Sys.Extract.SAPSQLCube.LastPackageID)';
+		
+		ELSE
+		LET vG.Sys.Extract.SAPSQLCube.WhereString	= '//';
+	
+	ENDIF
+
+
+	$(vG.Sys.Extract.SAPSQLCube.CubeName):
+	SELECT * FROM /$(vG.Sys.Extract.SAPSQLCube.CubeDomain)/F$(vG.Sys.Extract.SAPSQLCube.CubeID)
+	$(vG.Sys.Extract.SAPSQLCube.WhereString)  //Depending on the Loading Type, it Applies or not. ";" is in the line below for that reason
+	;
+	RENAME Fields using SYS_MAP_INFO_OBJECTS;
+	
+	// Add latest PKGID to the qvd file 
+    IF NoOfRows('$(vG.Sys.Extract.SAPSQLCube.CubeName)') > 0 then
+	
+	SYS_PACKAGES:
+	LOAD Max($(vG.Sys.Extract.SAPSQLCube.Package)) as PKGID Resident $(vG.Sys.Extract.SAPSQLCube.CubeName);
+	STORE SYS_PACKAGES Into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Extract.SAPSQLCube.ExtractorType)\$(vG.Sys.Extract.SAPSQLCube.CubeName)_PKGID.qvd;
+	DROP Table SYS_PACKAGES;	
+	
+	ENDIF
+
+	
+	// Build string for variable. Loops through all of the dimension tables created
+	// keys and their associated SID keys (for use later to link to the master data)
+	
+ IF NoOfRows('$(vG.Sys.Extract.SAPSQLCube.CubeName)') > 0 then  // If There is not data for the package downloaded it is not neccessary to load demensions
+	
+	LET vG.Sys.Extract.SAPSQLCube.FactNumOfFields = NoOfFields('$(vG.Sys.Extract.SAPSQLCube.CubeName)');
+	
+	FOR vG.Sys.Extract.SAPSQLCube.FactFields = 1 to $(vG.Sys.Extract.SAPSQLCube.FactNumOfFields)
+	
+		LET vG.Sys.Extract.SAPSQLCube.FactFieldNames = FieldName($(vG.Sys.Extract.SAPSQLCube.FactFields),'$(vG.Sys.Extract.SAPSQLCube.CubeName)');
+			
+		IF Left(vG.Sys.Extract.SAPSQLCube.FactFieldNames,4)='KEY_' then 
+			LET vG.Sys.Extract.SAPSQLCube.SingleDimensions = Right(vG.Sys.Extract.SAPSQLCube.FactFieldNames,1);
+			
+			IF vG.Sys.Extract.SAPSQLCube.FactFields = 1 Then
+			
+				LET vG.Sys.Extract.SAPSQLCube.StringDimensions =  chr(39) & '$(vG.Sys.Extract.SAPSQLCube.SingleDimensions)' &  chr(39);
+			ELSE
+				LET vG.Sys.Extract.SAPSQLCube.StringDimensions =  vG.Sys.Extract.SAPSQLCube.StringDimensions &   ',' &  chr(39) & '$(vG.Sys.Extract.SAPSQLCube.SingleDimensions)' &  chr(39);
+			ENDIF
+		ENDIF
+	
+	NEXT vG.Sys.Extract.SAPSQLCube.FactFields
+
+		
+	// Load dimensions tables:
+	FOR Each vG.Sys.Extract.SAPSQLCube.Dimensions in $(vG.Sys.Extract.SAPSQLCube.StringDimensions)
+	
+		//Create temporary table with the dimension name
+		DIM_$(vG.Sys.Extract.SAPSQLCube.CubeID)$(vG.Sys.Extract.SAPSQLCube.Dimensions):
+		SELECT * From /$(vG.Sys.Extract.SAPSQLCube.CubeDomain)/D$(vG.Sys.Extract.SAPSQLCube.CubeID)$(vG.Sys.Extract.SAPSQLCube.Dimensions);
+		
+		Concatenate(MASTER_DATA_SIDS)
+		LOAD * Resident DIM_$(vG.Sys.Extract.SAPSQLCube.CubeID)$(vG.Sys.Extract.SAPSQLCube.Dimensions);
+		
+		MASTER_DATA_SIDS_AUX:
+		LOAD *, 1 as _ControlField Resident MASTER_DATA_SIDS Where _DUMMY_ID = '1';
+		DROP Table MASTER_DATA_SIDS;
+		DROP Field _ControlField;
+		RENAME Table MASTER_DATA_SIDS_AUX to MASTER_DATA_SIDS;
+						
+		// Join the dimension table to the fact
+		Left Join ($(vG.Sys.Extract.SAPSQLCube.CubeName))
+		LOAD *, DIMID as KEY_$(vG.Sys.Extract.SAPSQLCube.CubeID)$(vG.Sys.Extract.SAPSQLCube.Dimensions)
+		Resident DIM_$(vG.Sys.Extract.SAPSQLCube.CubeID)$(vG.Sys.Extract.SAPSQLCube.Dimensions);
+	
+		//Remove unwanted keys and drop temporary dimension table from memory
+		DROP Field DIMID;
+		DROP Field KEY_$(vG.Sys.Extract.SAPSQLCube.CubeID)$(vG.Sys.Extract.SAPSQLCube.Dimensions);
+	    DROP Table DIM_$(vG.Sys.Extract.SAPSQLCube.CubeID)$(vG.Sys.Extract.SAPSQLCube.Dimensions);
+	
+	NEXT vG.Sys.Extract.SAPSQLCube.Dimensions
+	
+	ENDIF
+	
+	IF  vG.Sys.Extract.SAPSQLCube.PackageExists = 0 AND vG.Sys.Extract.SAPSQLCube.LoadingType = 'Delta' then
+	 
+	  IF NoOfRows('$(vG.Sys.Extract.SAPSQLCube.CubeName)') > 0 then
+	    
+	    Concatenate($(vG.Sys.Extract.SAPSQLCube.CubeName))
+		LOAD * From $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Extract.SAPSQLCube.ExtractorType)\$(vG.Sys.Extract.SAPSQLCube.CubeName).qvd (qvd);	
+	 	
+	 	STORE $(vG.Sys.Extract.SAPSQLCube.CubeName) INTO $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Extract.SAPSQLCube.ExtractorType)\$(vG.Sys.Extract.SAPSQLCube.CubeName).qvd;
+  
+       ENDIF
+	 
+	 ELSE
+	 
+		 STORE $(vG.Sys.Extract.SAPSQLCube.CubeName) INTO $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Extract.SAPSQLCube.ExtractorType)\$(vG.Sys.Extract.SAPSQLCube.CubeName).qvd;
+     
+     ENDIF
+     
+     DROP Table $(vG.Sys.Extract.SAPSQLCube.CubeName);
+	
+NEXT vG.Sys.Extract.SAPSQLCube.CountCube
+
+STORE MASTER_DATA_SIDS INTO $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)\$(vG.Sys.Path.QVD.Master.Data)\MASTER_DATA_SIDS_$(_extractor).qvd;
+DROP Table MASTER_DATA_SIDS;
+
+DROP Table SYS_CUBES;
+
+LET vG.Sys.Extract.SAPSQLCube.Dimensions = null();
+LET vG.Sys.Extract.SAPSQLCube.StringDimensions = null();
+LET vG.Sys.Extract.SAPSQLCube.SingleDimensions = null();
+LET vG.Sys.Extract.SAPSQLCube.FactNumOfFields = null();
+LET vG.Sys.Extract.SAPSQLCube.FactFields = null();
+LET vG.Sys.Extract.SAPSQLCube.FactFieldNames = null();
+LET vG.Sys.Extract.SAPSQLCube.NumOfCubes = null();
+LET vG.Sys.Extract.SAPSQLCube.CountCube = null();
+LET vG.Sys.Extract.SAPSQLCube.CubeID = null();
+LET vG.Sys.Extract.SAPSQLCube.ExtractorType = null();
+LET vG.Sys.Extract.SAPSQLCube.CubeDomain = null();
+LET vG.Sys.Extract.SAPSQLCube.Package = null();
+LET vG.Sys.Extract.SAPSQLCube.PackageExists	= null();		
+LET vG.Sys.Extract.SAPSQLCube.WhereString = null();
+
+
+End Sub;

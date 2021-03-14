@@ -1,0 +1,78 @@
+///////////////////////////////////LOADING Product Financial /////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
+Product_Financial:
+Load
+	Upper(Trim(Replace(Year&'-'&Material&'-'&Country,' ',''))) as SID_Brand,
+	//Product as Brand,
+	Units,
+	[Brand Name] as [VSM.Brand Family],
+	[NTS ($M)],
+	[Std Cost ($M)],
+	[OCNIS ($M)],
+	[MCP ($M)],
+	[Royalties ($M)],
+	[GP%],
+	Left(Year,4) as VSM.Year
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.Financial.Data)FF_FINANCIAL_DATA.qvd](qvd)
+Where [Year] <> 'Grand Total';
+
+
+Left Join (Product_Financial)
+Load 
+	Upper(Trim(Replace(Key,' ',''))) as SID_Brand,
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Product)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Product)), Upper(Trim([Product])))) as Brand,
+	Region as VSM.Region,
+	[Galenic Form] as [VSM.Galenic Form],
+	[RF-/R-/JnJ-Number] as [VSM.RF-/R-/JnJ-Number]
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.Financial.Data)FF_FINANCIAL_DATA_MASTER.qvd](qvd)
+Where Not Len (Product) = 0;
+
+// Storing the table to load the master fields from this table into Product Master
+STORE Product_Financial into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)M_FF_FINANCIAL_DATA_L2.qvd];
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim([Product])) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Product)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Product)), Upper(Trim([Product])))) as [B.Product_Brand],
+
+    ApplyMap('MAP_BRAND_E2E', Upper(Trim(Product)), '') as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Product)),
+			ApplyMap('MAP_BRAND_E2E', Upper(Trim(Product)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Product)), '') as [B.Global_Brand],
+
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Product)), '') as [B.Local_Brand],
+    
+    'Financial Flatfile' as B.Metric_Origin,
+    'FINANCIAL' as B.Metric
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.Financial.Data)FF_FINANCIAL_DATA.qvd](qvd)
+Where Not Len (Product) = 0;
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Concatenate Financial Metric with facts
+Concatenate(JSC_FACTS_FINAL)
+LOAD SID_Brand,
+	Units,
+	[NTS ($M)],
+	[Std Cost ($M)],
+	[OCNIS ($M)],
+	[MCP ($M)],
+	[Royalties ($M)],
+	[GP%],
+	VSM.Year
+Resident Product_Financial
+Where Not Len (Brand) = 0;
+DROP Table Product_Financial;

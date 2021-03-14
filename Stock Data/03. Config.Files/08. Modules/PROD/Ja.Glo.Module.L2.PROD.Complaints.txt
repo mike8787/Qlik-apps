@@ -1,0 +1,186 @@
+
+//////////////////////////////////////LOADING Complaints QVD////////////////////////////////////
+// 1. Load Complaints Facts
+// 2. Create metrics and transformations
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. Load Complaints Facts from QVD created with flat files extractor.
+COMPLAINTS:
+Load
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as Brand,
+    YearMonth,
+    [WW PPM],
+    [L1 Category],
+    [PROD Version]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.Complaints.Metrics)FF_COMPLAINTS.qvd](qvd);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim([Brand])) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as [B.Product_Brand],
+
+    ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '') as [B.E2E_International_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)),
+            ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Brand)), '') as [B.Global_Brand],
+
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Brand)), '') as [B.Local_Brand],
+    
+    'COMPLAINTS Flatfile' as B.Metric_Origin,
+    'COMPLAINTS' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.Complaints.Metrics)FF_COMPLAINTS.qvd](qvd);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 2. Creating necessary transformations
+COMPLAINTS_METRIC:
+NoConcatenate
+Load 
+    Brand,
+    [WW PPM],
+    [L1 Category],
+     Date(Date#(Left([YearMonth],4)&Right([YearMonth],2)&'01','YYYYMMDD'),'YYYYMMDD') as Date,
+     YearMonth,
+     Left([YearMonth],4) as Year,
+    '52' as [KPI ID]
+Resident COMPLAINTS;
+
+Drop Table COMPLAINTS;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 3. Creating the metrics
+//The following tables are created separately, with different fields which are necessary to create and evaluate charts for Complaints metric in Brand level and L1 Category level as well (distinct aggregation levels)
+COMPLAINTS_METRIC_AUX:
+Load 
+    Brand,
+    Date,
+    YearMonth,
+    Year,
+    [KPI ID],
+    Num(sum([WW PPM]),'#.##') as [Actual]
+Resident COMPLAINTS_METRIC
+Group by Brand, Date, YearMonth, Year, [KPI ID];
+
+
+LEFT JOIN(COMPLAINTS_METRIC_AUX)
+Load
+    Brand,
+    Num(avg(Actual),'#.##') as [Historic Actual Mean],
+    stdev(Actual) as [Target],
+    stdev(Actual)*2 as [Tolerance]
+Resident COMPLAINTS_METRIC_AUX
+Group by Brand;
+
+
+COMPLAINTS_METRIC_CATEGORY_AUX:
+Load 
+    Brand,
+    [L1 Category],
+    Date,
+    YearMonth,
+    Year,
+    [KPI ID],
+    Num(sum([WW PPM]),'#.##') as [Actual.Category]
+Resident COMPLAINTS_METRIC
+Group by Brand, [L1 Category], Date, YearMonth, Year, [KPI ID];
+
+
+LEFT JOIN(COMPLAINTS_METRIC_AUX)
+Load
+    Brand,
+    [L1 Category],
+    Date,
+    YearMonth,
+    Year,
+    [KPI ID],
+    [Actual.Category]
+RESIDENT COMPLAINTS_METRIC_CATEGORY_AUX;
+
+
+LEFT JOIN(COMPLAINTS_METRIC_AUX)
+Load
+    Brand,
+    [L1 Category],
+    Num(avg(Actual.Category),'#.##') as [Historic Actual Mean Category],
+    stdev(Actual.Category) as Target.Category,
+    stdev(Actual.Category)*2 as Tolerance.Category
+Resident COMPLAINTS_METRIC_CATEGORY_AUX
+Group by Brand, [L1 Category];
+
+Drop Table COMPLAINTS_METRIC_CATEGORY_AUX;
+Drop Table COMPLAINTS_METRIC;
+
+
+COMPLAINTS:
+Load Distinct
+    Brand,
+    YearMonth,
+    Year,
+    Date,
+    Brand&' | '&YearMonth as [Brand.Month],
+    Actual,
+    [Historic Actual Mean],
+    //Num([Historic Actual Mean]-Target,'#.##') as Target.Min,
+    Num([Historic Actual Mean]+Target,'#.##') as Target.Max,
+    //Num([Historic Actual Mean]-Tolerance,'#.##') as Tolerance.Min,
+    Num([Historic Actual Mean]+Tolerance,'#.##') as Tolerance.Max,
+    $(v.StatusEvaluationComplaints(2, Actual, Target, Tolerance, [Historic Actual Mean])) as Status,
+    Target,
+    Tolerance,
+    [KPI ID]
+Resident COMPLAINTS_METRIC_AUX;
+
+
+COMPLAINTS_CATEGORY_AUX:
+Load
+    Brand,
+    YearMonth,
+    Actual.Category,
+    Target.Category,
+    Tolerance.Category,
+    Brand&' | '&YearMonth as [Brand.Month],
+    [L1 Category],
+    [Historic Actual Mean Category],
+    $(v.StatusEvaluationComplaints(2, [Actual.Category], Target.Category, Tolerance.Category, [Historic Actual Mean Category])) as Status.Category
+Resident COMPLAINTS_METRIC_AUX;
+
+Drop Table COMPLAINTS_METRIC_AUX;
+
+
+COMPLAINTS_CATEGORY:
+Load
+    Brand&' | '&YearMonth as [Brand.Month],
+    [L1 Category],
+    Actual.Category,
+    [Historic Actual Mean Category],
+    Status.Category
+Resident COMPLAINTS_CATEGORY_AUX
+WHERE Status.Category=4;
+
+Drop Table COMPLAINTS_CATEGORY_AUX;
+
+
+STORE COMPLAINTS_CATEGORY into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_COMPLAINTS_CATEGORY.qvd];
+
+Drop Table COMPLAINTS_CATEGORY;
+
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident COMPLAINTS;
+DROP Table COMPLAINTS;

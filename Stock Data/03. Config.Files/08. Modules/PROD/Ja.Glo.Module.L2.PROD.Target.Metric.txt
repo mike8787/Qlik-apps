@@ -1,0 +1,39 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////LOADING MASTER DATA ///////////////////////////////////////
+//	1. Metric Master
+// 	2. Target Master
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. Metric Master
+// 1.1 Mapping to assign New Metric IDs based on KPI Ids that were assigned in the Layer 1.
+// 1.2 Mapping to assign Metric Names based on KPI Ids that were assigned in the Layer 1.
+
+// 1. Metric Master
+M_METRIC:
+NoConcatenate
+Load 
+	[KPI ID], 
+    [MetricID],
+    Metric,
+    [Metric Sort]
+From
+[$(vG.Sys.Path.Config.Variables.KPIs)Janssen.GLOBAL.KPI.PROD.Table.xlsx]
+(ooxml, embedded labels, table is Sheet1)
+Where not len([KPI ID])=0;
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. Target Master
+
+M_TARGETS:
+LOAD AutoNumber(YEAR&'|'&[KPI],'TARGETS') as SID_Targets,
+//	 KPI as Metric,
+//     YEAR as Year.t,
+     GREEN as Green,
+     YELLOW as Yellow,
+     RED as Red,
+     SPECIFICATIONS AS Specifications
+FROM
+$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd(qvd)
+;
+

@@ -1,0 +1,63 @@
+LEFT JOIN(F_STOCK)
+LOAD
+    [Key Operation],
+    [Number Titles] as [Titles Total]
+RESIDENT M_PORTFOLIO;
+
+
+//Cumulative in progress...
+F_STOCK_0:
+LOAD Distinct
+Date,
+[Stock Name],
+if(isnull(sum([Titles Total])),'0',sum([Titles Total])) + if(isnull(Previous(Peek('Cumulative'))),'0',Previous(Peek('Cumulative'))) AS Cumulative
+RESIDENT F_STOCK
+GROUP BY  [Stock Name], Date 
+Order by  [Stock Name], Date asc;
+
+store F_STOCK_0 into '[$(vRootApp)QVDS/Layer.1/test_0_GROUP.qvd]';
+
+LEFT JOIN(F_STOCK)
+LOAD
+	Date,
+	[Stock Name],
+	Cumulative
+RESIDENT F_STOCK_0;
+
+store F_STOCK into '[$(vRootApp)QVDS/Layer.1/test_1_GROUP.qvd]';
+
+
+DROP TABLE F_STOCK_0;
+/*
+F_STOCK_1:
+LOAD Distinct
+	*,
+	if(isnull([Titles Total]),'0',[Titles Total]) + if(isnull(Previous(Peek('Cumulative'))),'0',Previous(Peek('Cumulative'))) AS Cumulative
+RESIDENT F_STOCK
+Order by Date asc, [Stock Name];
+	//RangeSum([Titles Total])
+store F_STOCK_1 into '[$(vRootApp)QVDS/Layer.1/test.qvd]';
+
+F_STOCK_2:
+LOAD Distinct
+	[Stock Name],
+	Date,
+	sum(Cumulative) as Cumulative
+RESIDENT F_STOCK_1
+GROUP BY Date, [Stock Name];
+
+store F_STOCK_2 into '[$(vRootApp)QVDS/Layer.1/test_GROUP.qvd]';
+DROP TABLE F_STOCK_1;
+RENAME TABLE F_STOCK_2 to F_STOCK_1;
+
+
+
+LEFT JOIN(F_STOCK)
+LOAD
+	Date,
+	[Stock Name],
+	Cumulative
+RESIDENT F_STOCK_1;
+
+DROP TABLE F_STOCK_1;
+*/

@@ -1,0 +1,185 @@
+//////////////////////////////////////LOADING PPQS QVD////////////////////////////////////
+// PPQS QVD
+// PPQS TARGET
+//	If Actual value is Green then Status is 2
+//	If Actual value is Yellow then Status is 3
+//	If Actual value is Red then Status is 4
+// Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. Load PPQS facts
+
+// Mapping table to include the date as YYYY/MM/DD format
+MAP_QUARTER_MONTH:
+Mapping
+Load * Inline  [Quarter, Month
+				Q1, 03
+				Q2, 06
+				Q3, 09
+				Q4, 12
+];
+
+
+F_PPQS:
+LOAD
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as Brand,
+	Actual as ActualAux,
+	Date(Date#(Left([PROD Version],4)&Applymap('MAP_QUARTER_MONTH',Right([PROD Version],2))&'01','YYYYMMDD'),'YYYYMMDD') as Date,
+	If(Actual = 'Green', 2, If (Actual = 'Yellow', 3, If (Actual = 'Red', 4, 1))) as StatusAux,
+	'56' as [KPI ID]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.PPQS.Metric)FF_PPQS.qvd](qvd);
+
+
+MAP_MAXSTATUS_PPQS_COMMERCIAL:
+Mapping
+LOAD
+	Brand&Date as Brand_Date,
+	max(StatusAux) as Status
+RESIDENT F_PPQS
+GROUP BY Brand&Date;
+
+DROP FIELD StatusAux;
+DROP FIELD ActualAux;
+
+
+F_PPQS_AUX:
+LOAD Distinct
+	*,
+	ApplyMap('MAP_MAXSTATUS_PPQS_COMMERCIAL',Brand&Date) as Status
+RESIDENT F_PPQS;
+
+DROP TABLE F_PPQS;
+RENAME TABLE F_PPQS_AUX TO F_PPQS;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim([Brand])) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as [B.Product_Brand],
+
+	ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '') as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)),
+			ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Brand)), '') as [B.Global_Brand],
+
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Brand)), '') as [B.Local_Brand],
+    
+    'PPQS Flatfile' as B.Metric_Origin,
+    'PPQS' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.PPQS.Metric)FF_PPQS.qvd](qvd);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Concatenate(JSC_FACTS)
+LOAD *,
+if(Status=4,'Red',if(Status=3,'Yellow',if(Status=2,'Green',null()))) as Actual,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_PPQS;
+DROP Table F_PPQS;
+
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// PPQS Facts for Development Brands
+
+// Mapping for SP Brands for which PPQS facts should be included
+//CH : REMOVING PPQ FROM DEVELOPMENT BRANDS : 
+/*
+MAP_SPBRAND_E2EBRAND:
+Mapping Load
+  UPPER(Trim(ProductName)) as ProductName,
+  1 as SP_Flag
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_PRODUCT.qvd]
+(qvd);
+
+
+F_D_PPQS_AUX:
+LOAD
+	ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as Brand_AUX,
+	Actual as ActualAux,
+	Date(Date#(Left([PROD Version],4)&Applymap('MAP_QUARTER_MONTH',Right([PROD Version],2))&'01','YYYYMMDD'),'YYYYMMDD') as MeasurmentDate,
+	Date(MonthStart(Today()),'YYYYMMDD') as Date,								//Date created to link PPQS with KPI_Thresholds and get corresponding Green/Yellow/Red fields.
+	If(Actual = 'Green', 2, If (Actual = 'Yellow', 3, If (Actual = 'Red', 4, 1))) as StatusAux,
+	'56' as [KPI ID],
+	'22' as StageGateId,
+	ApplyMap('MAP_SPBRAND_E2EBRAND',
+		ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand]))))
+			, 0) as DEV_Flag
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.PPQS.Metric)FF_PPQS.qvd](qvd);
+
+
+MAX_DATE:
+NoConcatenate
+LOAD distinct
+Max(MeasurmentDate) as [Max Date]
+Resident F_D_PPQS_AUX 
+Order by MeasurmentDate DESC;
+
+LET v.Max_Date= peek('Max Date',0,'MAX_DATE');
+
+Drop table MAX_DATE; 
+
+
+MAP_MAXSTATUS_PPQS_DEV:
+Mapping
+LOAD
+	Brand_AUX,
+	max(StatusAux) as Status
+RESIDENT F_D_PPQS_AUX
+GROUP BY Brand_AUX;
+
+
+DROP FIELD StatusAux;
+DROP FIELD ActualAux;
+
+
+F_PPQS_AUX:
+LOAD Distinct
+	*,
+	ApplyMap('MAP_MAXSTATUS_PPQS_DEV',Brand_AUX) as Status
+RESIDENT F_D_PPQS_AUX;
+
+DROP TABLE F_D_PPQS_AUX;
+RENAME TABLE F_PPQS_AUX TO F_D_PPQS_AUX;
+
+
+F_D_PPQS:
+NoConcatenate
+Load *
+Resident F_D_PPQS_AUX
+Where DEV_Flag = 1;
+
+Drop Table F_D_PPQS_AUX;
+Drop Field DEV_Flag;
+
+// Joining to include the brand with other details
+Left Join (F_D_PPQS)
+LOAD Upper(Trim(ProductName)) as Brand_AUX, 
+     Upper(Trim(ProductName))& If(Len(ProductStrength) > 0, '-'&Upper(Trim(ProductStrength)))& If(Len(AdditionalClarification) > 0,'-'&Upper(Trim(AdditionalClarification))) as Brand
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_PRODUCT.qvd]
+(qvd);
+
+Drop Field Brand_AUX from F_D_PPQS;
+
+Concatenate(JSC_FACTS)
+LOAD *,
+if(Status=4,'Red',if(Status=3,'Yellow',if(Status=2,'Green',null()))) as Actual,
+0 as [Commercial Brand],
+1 as [Development Brand]
+Resident F_D_PPQS
+Where MeasurmentDate = $(v.Max_Date)
+//Where Wildmatch(Brand,'TEST*')
+; //Comment this line once development brands will be fixed
+DROP Table F_D_PPQS;*/

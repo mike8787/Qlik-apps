@@ -1,0 +1,625 @@
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping1 to get the relation between Local SKU and global ID
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_SKU_E2:
+MAPPING LOAD  trim(text([E2 Material/SKU])) as MAPP_ID1, 
+     [Global Material ID]		as MAPP_IND1
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping2 to get the relation between Local SKU and global ID
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_SKU_N:
+MAPPING LOAD trim(text([Material / SKU])) as MAPP_ID2,
+     [Global Material ID]		as MAPP_IND2
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between global ID and the SID, so we can link data for FF between Facts table and the Material dimension
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_GLOBAL_ID_SID_REL:
+MAPPING LOAD  [Global Material ID]		as MAPP_ID3,
+     	     SID_0MATERIAL  			as MAPP_IND3
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relative month of each Quarter
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+MAPP_QUARTERS_EQ:
+MAPPING LOAD * INLINE [
+	MAPP_QUARTER, MAPP_MONTH
+    'Q1', '03'
+    'Q2', '06'
+    'Q3', '09'
+    'Q4', '12'
+];
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between customer and the SID, so we can link data for FF between Facts table and the Customer dimension
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_CUSTOMER_SID_REL:
+MAPPING LOAD  num(Customer)		as MAPP_ID4,
+     	     num(SID_0CUSTOMER)  			as MAPP_IND4
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_CUSTOMER_L2.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between Plant and the SID, so we can link data for FF between Facts table and the Plant dimension
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_SITE_SID_REL:
+MAPPING LOAD  upper(replace(text([Plant]),' ',''))		as MAPP_ID5,
+     	     SID_0PLANT 			as MAPP_IND5
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Master.Data)M_PLANT.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//+++++++++++++++++++++++++++++++++PROJECTIONS FLAT FILE MAPPINGS 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Custom MApp equivalence table for projections
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+MAPP_QUARTERS_EQ_PROJ:
+MAPPING LOAD * INLINE [
+	MAPP_QUARTER1, MAPP_MONTH1
+    'Q1', '01'
+    'Q2', '04'
+    'Q3', '07'
+    'Q4', '10'
+];
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++ DEMAND FF MAPPINGS 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between material and the SID, so we can link data for FF between Facts table and the Material dimension
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//IMPORTANT NOTE: Seems that the Material master have duplicated Material/SKUs
+//One with brand related (000000000012) and another with no brand related (12)
+//We want the SID related to a brand descriptive so we have to convert the string into number since the input Flat file is 12 instead of 0000000012
+MAPP_MATERIAL_SID_REL:
+MAPPING LOAD  text(if(len(text([Material / SKU]))>=18,num(right([Material / SKU],14)), text([Material / SKU])))		as MAPP_ID6,
+     	     SID_0MATERIAL  			as MAPP_IND6
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+//Just the ones with descriptives
+WHERE  
+[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and
+isnull([Material / SKU])=0 and text([Material / SKU])<>' '
+;
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++ DEMAND STATIC FF MAPPINGS 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between material and the SID, so we can link data for FF between Facts table and the Material dimension
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//IMPORTANT NOTE: Seems that the Material master have duplicated Material/SKUs
+//One with brand related (000000000012) and another with no brand related (12)
+//We want the SID related to a brand descriptive so we have to convert the string into number since the input Flat file is 12 instead of 0000000012
+
+MAPP_MATERIAL_SID_REL2:
+MAPPING LOAD  text(if(len(text([Material / SKU]))>=18,num(right([Material / SKU],14)), text([Material / SKU])))		as MAPP_ID7,
+     	     SID_0MATERIAL  			as MAPP_IND7
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+//Just the ones with descriptives, we want only the ones that have E2E International Brand and Material/SKU 
+WHERE  
+[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and 
+isnull([Material / SKU])=0 and text([Material / SKU])<>' '
+;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between Brand and the classification, so we can link data between Master table and Targets by classification
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+MAPP_FF_F_STRATEGIC:
+MAPPING LOAD upper(replace(text([st.Brand]),' ','')) as MAPP_ID8,
+	[st.Classification] as MAPP_IND8
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Demand)$(vG.Sys.Path.QVD.FlatFiles)FF_F_STRATEGIC.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the Country Key
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+BASE_MAPP_COUNTRY_KEY:
+LOAD upper(replace(text([Short Description]),' ','')) as MAPP_ID9_BASE,
+	[Country key] as MAPP_IND9_BASE
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Master.Data)M_COUNTRY.qvd]
+(qvd);
+
+CONCATENATE(BASE_MAPP_COUNTRY_KEY)
+LOAD * INLINE [
+MAPP_ID9_BASE,MAPP_IND9_BASE
+'RUSSIA', 'RU'
+'RUSSIACIS', 'RU'
+];
+
+MAPP_COUNTRY_KEY:
+MAPPING LOAD MAPP_ID9_BASE as MAPP_ID9, 
+			 MAPP_IND9_BASE as MAPP_IND9
+RESIDENT BASE_MAPP_COUNTRY_KEY;
+
+DROP TABLE BASE_MAPP_COUNTRY_KEY;
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping load to get therapeutic area of a brand
+//This is a flat file but will be included in the M.Material master qvd since its a single ad hoc grouping by inventory
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='TAH_BRAND';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+
+//2.)Generate Base mapping table
+BASE_MAPP_THERAP_AREA:
+LOAD upper(replace([Th.International brand],' ','')) as [Th.International brand],
+	 upper([Th.Therapeutic area]) as [Th.Therapeutic area]
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+
+left join(BASE_MAPP_THERAP_AREA)
+LOAD DISTINCT
+ upper(replace([E2E International Brand],' ','')) as [Th.International brand],
+ num(right([Material / SKU],14)) as [Material / SKU]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd]
+(qvd)
+WHERE  
+[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and
+isnull([Material / SKU])=0 and text([Material / SKU])<>' ' 
+;
+
+//3.)Load mapping info
+MAPP_THERAP_AREA:
+MAPPING LOAD  [Material / SKU],
+			  [Th.Therapeutic area]
+RESIDENT BASE_MAPP_THERAP_AREA;
+
+DROP TABLE BASE_MAPP_THERAP_AREA;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping load to get platform of a brand
+//This is a flat file but will be included in the M.Material master qvd since its a single ad hoc grouping by inventory
+
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='PLATFORM';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+
+//2.)Generate Base mapping table
+BASE_MAPP_PLATFORM:
+LOAD  upper(replace([Pl.E2E International Brand],' ','')) as [Pl.E2E International Brand],
+	  upper([Pl.Platform]) as [Pl.Platform]
+
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+
+LEFT JOIN(BASE_MAPP_PLATFORM)
+LOAD DISTINCT
+ upper(replace([E2E International Brand],' ','')) as [Pl.E2E International Brand],
+ num(right([Material / SKU],14)) as [Material / SKU]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd]
+(qvd)
+WHERE  
+[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and
+isnull([Material / SKU])=0 and text([Material / SKU])<>' ' 
+;
+
+//3.)Load mapping info
+MAPP_PLATFORM:
+MAPPING LOAD  [Material / SKU],
+			  [Pl.Platform]
+RESIDENT BASE_MAPP_PLATFORM;
+
+DROP TABLE BASE_MAPP_PLATFORM;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++QBR MAPPINGS 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Mapping to get the equivalence between the material types of the inputs and the official material type
+//NOTE: PB stands for Prefabricated bulk and for DPC for Direct product capture
+MAPP_BULK_EQ_QBR_INPUTS:
+MAPPING LOAD INPUT_QBR as MAPP_ID12,
+			EQ as MAPP_IND12
+INLINE [
+INPUT_QBR,					EQ
+BULK(EXTERNAL), 		'BULK'
+BULK(INTERNAL), 		'BULK'
+APIFB, 					'API' 			
+APIDPC, 				'API'			
+SECONDARYPACKAGING, 	'QV_OTHERS'
+API,					'API'
+BULK,					'BULK'
+FG,						'FG'
+RM,						'RM'
+];
+
+//Mapping to check if the site appears in SAP
+MAPP_CHECK_PLANT_IN_SAP:
+MAPPING LOAD text(upper(replace(text([SID_0PLANT]),' ','')))  as MAPP_ID18, 
+														   1  as MAPP_IND18
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_PLANT_L2.qvd]
+(qvd)
+//Just the ficticius ones
+WHERE left([SID_0PLANT],3)='FQV';
+
+//Mapping to align the sites with SAP through the alignment flat file
+MAPP_ALIGN_INPUT_PLANT:
+MAPPING LOAD        text(upper(replace(text([Al.Location]),' ',''))) 	     as MAPP_ID19, 
+				   upper(replace(text([Al.Master.Location]),' ',''))         as MAPP_IND19
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)$(vG.Sys.Path.Auxiliar.QBR.Alignment)FF_ALIGN_LOCAT.qvd]
+(qvd);
+
+//Mapping to check if the brand appears in SAP
+MAPP_CHECK_BRAND_IN_SAP:
+MAPPING LOAD text(upper(replace([E2E International Brand],' ',''))) as MAPP_ID20, 
+															1  		as MAPP_IND20
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+;
+
+//Mapping to align the brands with SAP through the alignment flat file
+// MAPP_ALIGN_INPUT_BRAND:
+// MAPPING LOAD        text(upper(replace(text([Al.Brand]),' ',''))) 	     as MAPP_ID21, 
+					// upper(replace(text([Al.Master.Brand]),' ',''))       as MAPP_IND21
+// FROM
+// [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)$(vG.Sys.Path.Auxiliar.QBR.Alignment)FF_ALIGN_BRAND.qvd]
+// (qvd);
+
+//Mapping to check if the SKU appears in SAP
+MAPP_CHECK_SKU_IN_SAP:
+MAPPING LOAD text(if(isnull(NUM(NUM#(num(right([Material / SKU],14))))),
+					text([Material / SKU]),
+					text(NUM(NUM#(num(right([Material / SKU],14)))))))  as MAPP_ID22, 
+																	1  as MAPP_IND22
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+;
+
+//Mapping to align the SKUs with SAP through the alignment flat file
+MAPP_ALIGN_INPUT_SKU:
+MAPPING LOAD        text(if(isnull(NUM(NUM#(num(right([Al.SKU],14))))),
+						text([Al.SKU]),
+						text(NUM(NUM#(num(right([Al.SKU],14)))))))		as MAPP_ID23, 
+			       upper(replace(text([Al.Master.SKU]),' ',''))       	as MAPP_IND23
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)$(vG.Sys.Path.Auxiliar.QBR.Alignment)FF_ALIGN_SKU.qvd]
+(qvd);
+
+//Mapping to get the relateve [Site]/[Asset ID] descriptive
+MAPP_ASSET_DESC_D2I:
+MAPPING LOAD        upper(replace([AD.Asset ID],' ',''))		as MAPP_ID_ASS1, 
+					//upper(replace([AD.Site],' ',''))&upper(replace([AD.Asset ID],' ',''))		as MAPP_ID_ASS1,    // Taking Site ID into account
+			       AD.Description       		as MAPP_IND_ASS1
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)Asset.Description/FF_ASSET_DESC.qvd]
+(qvd);
+
+//Mapping to get the relateve [Site]/[Asset ID] Process Step
+MAPP_ASSET_ID_PROCESSSTEP_D2I:
+MAPPING LOAD        upper(replace([AD.Asset ID],' ',''))		as MAPP_ID_ASS2, 
+					//upper(replace([AD.Site],' ',''))&upper(replace([AD.Asset ID],' ',''))		as MAPP_ID_ASS2, 	// Taking Site ID into account
+			       [AD.Process Step]       		as MAPP_IND_ASS2
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)Asset.Description/FF_ASSET_DESC.qvd]
+(qvd);
+
+
+//Mapping to align the flat files through the International Brand
+MAPP_ALIGN_INPUT_INT_BRAND:
+MAPPING LOAD        text(upper(replace(text([Al.Brand]),' ',''))) 	     as MAPP_ID24, 
+				   [Al.Master E2E International Brand]         as MAPP_IND24
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)$(vG.Sys.Path.Auxiliar.QBR.Alignment)FF_ALIGN_INT_BRAND.qvd]
+(qvd);
+
+//Mapping to align the flat files through the Global Material Type
+MAPP_ALIGN_INPUT_GLOBAL_MAT_TYPE:
+MAPPING LOAD        text(upper(replace(text([Al.Global Material Type]),' ',''))) 	     as MAPP_ID25, 
+				   [Al.Master Global Material Type]        as MAPP_IND25
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)$(vG.Sys.Path.Auxiliar.QBR.Alignment)FF_ALIGN_GLOBAL_MAT_TYPE.qvd]
+(qvd);
+
+//Mapping to align the flat files through the Galenic Form 
+MAPP_ALIGN_INPUT_GAL_FORM:
+MAPPING LOAD        text(upper(replace(text([Al.Galenic Form]),' ',''))) 	     as MAPP_ID26, 
+				   [Al.Master Galenic Form]         as MAPP_IND26
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)$(vG.Sys.Path.Auxiliar.QBR.Alignment)FF_ALIGN_GAL_FORM.qvd]
+(qvd);
+
+//Mapping to align the flat files through the Strength 
+MAPP_ALIGN_INPUT_STRENGTH:
+MAPPING LOAD        text(upper(replace(text([Al.Strength]),' ',''))) 	     as MAPP_ID27, 
+				   [Al.Master Strength]        as MAPP_IND27
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.QBR.and.SOP)$(vG.Sys.Path.Auxiliar.QBR.Alignment)FF_ALIGN_STRENGTH.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between material and the SID, so we can link data for FF between Facts table and the Material dimension
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_MATERIAL_SID_REL_QBR:
+MAPPING LOAD  
+			text(if(isnull(NUM(NUM#(num(right([Material / SKU],14))))),
+					text([Material / SKU]),
+					text(NUM(NUM#(num(right([Material / SKU],14)))))))		as MAPP_ID6,
+
+     	     SID_0MATERIAL  				as MAPP_IND1_QBR
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+//Just the ones with descriptives
+WHERE  
+[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and
+isnull([Material / SKU])=0 and text([Material / SKU])<>' '
+;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between SID and E2E international Brand
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_SID_E2E_BRAND:
+MAPPING LOAD  
+			text(SID_0MATERIAL)  								as MAPP_ID2_QBR,
+			upper(replace([E2E International Brand],' ',''))  	as MAPP_IND2_QBR
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+//Just the ones with descriptives
+WHERE  
+[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and
+isnull([Material / SKU])=0 and text([Material / SKU])<>' '
+;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between SID and Global Material Type
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_SID_E2E_MATTYPE:
+MAPPING LOAD  
+			text(SID_0MATERIAL) 							as MAPP_ID3_QBR,
+     	    upper(replace([Global Material Type],' ',''))  	as MAPP_IND3_QBR
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+//Just the ones with descriptives
+WHERE  
+[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and
+isnull([Material / SKU])=0 and text([Material / SKU])<>' '
+;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between SID plant and its location
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_SID_E2E_LOCATION:
+MAPPING LOAD  
+			text(SID_0PLANT) 							as MAPP_ID4_QBR,
+     	    upper(replace([Location],' ',''))  			as MAPP_IND4_QBR
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_PLANT_L2.qvd]
+(qvd)
+//Just the ones with descriptives
+WHERE  Not isnull([Location]) and [Location]<>'' and [Location]<>' '
+;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++++++++INVENTORY MAPPINGS 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get all the Global Material Type from the Material Master M_MATERIAL_L2
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_MATERIAL_MAT_TYPE:
+MAPPING LOAD  trim(text([Global Material Type])) as MAPP_ID13, 
+											   1 as MAPP_IND13
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd]
+(qvd);
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping load to get the supply/quality driven of a global reason description
+//This is a flat file but will be included in the M.Material master qvd since its a single ad hoc grouping by inventory
+
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='DESTR_REASON_CODE';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+
+//2.)Load mapping info
+MAPP_GLOBAL_REASON_DESCRIP_SQ_DRIVEN:
+MAPPING LOAD text([Global Reason Description]) as MAPP_ID14,
+					  [Supply/Quality driven]  as MAPP_IND14
+
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+						   
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping load to get the Incoming/Outgoing field of a Movement Type
+//This is a flat file but will be included in the M.Material master qvd since its a single ad hoc grouping by inventory
+
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='DESTR_REASON_CODE';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+
+//2.)Load mapping info
+MAPP_MOVEMENT_TYPE_INCOMING_OUTGOING:
+MAPPING LOAD       [Movement Type] as MAPP_ID15,
+		      [Incoming/Outgoing]  as MAPP_IND15
+
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++ DESTRUCTIONS FF MAPPINGS 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the relation between material and the SID, so we can link data for FF between Facts table and the Material dimension
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//IMPORTANT NOTE: Seems that the Material master have duplicated Material/SKUs
+//One with brand related (000000000012) and another with no brand related (12)
+//We want the SID related to a brand descriptive so we have to convert the string into number since the input Flat file is 12 instead of 0000000012
+//Anything like 
+MAPP_MATERIAL_SID_REL3:
+MAPPING LOAD if(wildmatch([Source System],'*BTB*','*B2B*'),
+                text(if(len(text(SubField([Material / SKU], 'BT', 2)))>=18,num(right(SubField([Material / SKU], 'BT', 2),14)), text(SubField([Material / SKU], 'BT', 2)))),
+                    text(if(len(text([Material / SKU]))>=18,num(right([Material / SKU],14)), text([Material / SKU]))))
+             &if([Source System]='SP2CLNT050' or [Source System]=' ','EUROPE2',if(wildmatch([Source System],'*BTB*','*B2B*'),'B2B',[Source System])) as MAPP_ID16,
+           SID_0MATERIAL     as MAPP_IND16
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+//Just the ones with descriptives
+WHERE  
+isnull([Material / SKU])=0 and text([Material / SKU])<>' ' and if([Source System]='SP2CLNT050' or [Source System]=' ', [Global Material ID]<>' ', true())
+//isnull([Material / SKU])=0 and text([Material / SKU])<>' ' and if([Source System]='SP2CLNT050' or [Source System]=' ', [Global Material ID]<>' ', [Global Material ID])
+// When a [Global Material ID] is in a text format, QV interprete it as a false 
+;
+
+MAPP_SITE_SID_REL2:
+MAPPING LOAD  upper(replace(text([Plant]),' ',''))		as MAPP_ID17,
+     	     SID_0PLANT 			as MAPP_IND17
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_PLANT_L2.qvd]
+(qvd);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//++++++++++++++++++++++++++++ General BSC FF MAPPINGS 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping table to get the Month descriptive in Number
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Generate base mapping table
+BASE_MAPP_MONTHNUM:
+LOAD * INLINE [
+    MAPP_Month, MAPP_MonthNum
+    'Jan','01'
+    'Feb','02'
+    'Mar','03'
+    'Apr','04'
+    'May','05'
+    'Jun','06'
+    'Jul','07'
+    'Aug','08'
+    'Sep','09'
+    'Oct','10'
+    'Nov','11'
+    'Dec','12'
+];
+
+//Create mapping table using previous inline
+
+MAPP_MONTHNUM:
+MAPPING LOAD upper(MAPP_Month) as MAPP_FR_ID1,
+			text(MAPP_MonthNum) as MAPP_FR_IND1
+			
+RESIDENT BASE_MAPP_MONTHNUM;
+DROP TABLE BASE_MAPP_MONTHNUM;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the Franchise per brand, franchise is a kind of therapeutic area but only used in North america
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+MAPP_FRANCHISE_BRAND:
+MAPPING LOAD BASE_MAPP_FRANCH_ID2 as MAPP_FRANCH_ID,
+			BASE_MAPP_FRANCH_IND as MAPP_FRANCH_IND
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.BSC)$(vG.Sys.Path.QVD.FlatFiles)FF_BSC_FRANCHISE.qvd]
+(qvd);
+
+
+//We want the SKU related to a SID
+MAPP_SID_TO_SKU:
+MAPPING LOAD  
+	SID_0MATERIAL,
+	replace(ltrim(replace([Material / SKU], '0', ' ')), ' ', 0)
+	 	     
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L1.5.qvd]
+(qvd)
+//Just the ones with descriptives
+//WHERE  
+//[E2E International Brand]<>' ' AND isnull([E2E International Brand])=0 and
+//isnull([Material / SKU])=0 and text([Material / SKU])<>' '
+;
+
+
+

@@ -1,0 +1,168 @@
+//////////////////////////////////////LOADING LIFR and STOCK OUTS QVDs////////////////////////////////////
+// Load LIFR Facts
+// Load STOCK OUTS Facts
+// Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+
+///////////////////////////////// LIFR //////////////////////////////////////
+
+// Loading data from Layer 2 qvd
+F_LIFR_AUX:
+NoConcatenate
+LOAD 1 as [KPI ID],
+	 Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,
+	 Year(Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD')) as Year,
+	 round(sum(LinesFilled)/sum(LinesDemand),0.001) as Actual,
+      ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])), ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])), 
+      		ApplyMap('MAP_SIDKEY_E2EBRAND', SID_Key, Upper(Trim([Base Brand]))))) as Brand,
+     //Concat(if(not len(Comment)=0, AutoNumber(Date&ApplyMap('MAP_BRAND_ALIGNMENT',[Base Brand])&Comment,'LIFR_'&Date&ApplyMap('MAP_BRAND_ALIGNMENT',[Base Brand]))&': ' & Comment),', ') as Comment // <<TEST>>
+     Concat(Comment,chr(13)) as Comment
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.KPITool)F_LIFR_L2.qvd]
+(qvd)
+Where LIFR_AREA_ID=1 and not len([Base Brand])=0
+Group by Date, ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])), ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])), 
+      				ApplyMap('MAP_SIDKEY_E2EBRAND', SID_Key, Upper(Trim([Base Brand])))));
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+	SID_Key as B.SID_Key,
+	Upper(Trim([Base Brand])) as [B.Original_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])), ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])), 
+      		(ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, Upper(Trim([Base Brand])))))) as [B.Product_Brand],
+
+	ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])),ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, '')) as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])), 
+			ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])),ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, ''))) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_SIDKEY_GLOBALBRAND', SID_Key, '') as [B.Global_Brand],
+
+    ApplyMap('MAP_SIDKEY_LOCALBRAND', SID_Key, '') as [B.Local_Brand],
+    
+	 'KPI Tools Dashboard' as B.Metric_Origin,
+	 'LIFR' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.KPITool)F_LIFR_L2.qvd]
+(qvd)
+Where LIFR_AREA_ID=1 and not len([Base Brand])=0;
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+LEFT Join(F_LIFR_AUX)
+LOAD 
+	 1 as [KPI ID],
+     Year,
+	 LIFR.Target as Target,
+     LIFR.Tolerance as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.KPITool)$(vG.Sys.Path.QVD.FlatFiles)FF_LIFR_TARGETS.qvd](qvd)
+Where LIFR.KPI = 'FILLRATESTRAT';
+
+F_LIFR:
+NoConcatenate
+LOAD [KPI ID],
+	 Date,
+	 Year,
+	 Brand,
+	 Actual,
+	 Target,
+	 Tolerance,
+	 $(v.StatusEvaluation(5, Actual, Target, Tolerance)) as Status,
+	 Comment
+Resident F_LIFR_AUX;
+DROP Table F_LIFR_AUX;
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_LIFR;
+DROP Table F_LIFR;
+//STORE F_INV into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_INV.qvd];
+//DROP Table F_INV;
+
+
+
+///////////////////////////////// Stock Outs //////////////////////////////////////
+F_SO_AUX:
+NoConcatenate
+LOAD 2 as [KPI ID],
+	 Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,
+	 Year(Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD')) as Year,
+     ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])), ApplyMap('MAP_BRAND_E2E',
+     		 Upper(Trim([Base Brand])), ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, Upper(Trim([Base Brand]))))) as Brand,
+     sum(Counter) as Actual,
+     Concat(Comment,chr(13)) as Comment
+     //Concat(if(not len(Comment)=0, AutoNumber(Date&ApplyMap('MAP_BRAND_ALIGNMENT',[Base Brand])&Comment,'LIFR_'&Date&ApplyMap('MAP_BRAND_ALIGNMENT',[Base Brand]))&': ' & Comment),', ') as Comment
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.KPITool)F_STK_OUT_L2.qvd]
+(qvd)
+Group by Date, ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])), ApplyMap('MAP_BRAND_E2E',
+     		 Upper(Trim([Base Brand])), ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, Upper(Trim([Base Brand])))));
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+	SID_Key as B.SID_Key,
+	Upper(Trim([Base Brand])) as [B.Original_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])),ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])),
+     		ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, Upper(Trim([Base Brand]))))) as [B.Product_Brand],
+
+	ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])),ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, '')) as [B.E2E_International_Brand],
+
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Base Brand])), 
+			ApplyMap('MAP_BRAND_E2E',Upper(Trim([Base Brand])),ApplyMap('MAP_SIDKEY_MATERIALDESCRIPTION', SID_Key, ''))) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_SIDKEY_GLOBALBRAND', SID_Key, '') as [B.Global_Brand],
+
+    ApplyMap('MAP_SIDKEY_LOCALBRAND', SID_Key, '') as [B.Local_Brand],
+
+	 'KPI Tools Dashboard' as B.Metric_Origin,
+	 'STOCK OUTS' as B.Metric
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.KPITool)F_STK_OUT_L2.qvd]
+(qvd);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+LEFT Join(F_SO_AUX)
+LOAD 2 as [KPI ID],
+     YEAR as Year, 
+     TARGET as Target, 
+     TOLERANCE as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]='2';
+
+F_SO:
+NoConcatenate
+LOAD [KPI ID],
+	 Date,
+	 Year,
+	 Brand,
+	 Actual,
+	 Target,
+	 Tolerance,
+	 $(v.StatusEvaluation(3, Actual, Target, Tolerance)) as Status,
+	 Comment
+Resident F_SO_AUX;
+DROP Table F_SO_AUX;
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_SO;
+DROP Table F_SO;

@@ -1,0 +1,248 @@
+FACTS_JSC_AUX1:
+LOAD 
+	*,
+	if(len([Act GI Date]),Date([Act GI Date],'YYYYMM')&'01') as Date	
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.Config.Modules.OTD)F_OTD1_L3.qvd] (qvd)
+WHERE [WSC Managed]='Yes';
+
+
+// Remove countries with country key=null()
+M_CUSTOMER_L3:
+LOAD 
+     *
+FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Master.Data)M_CUSTOMER_L3.qvd (qvd)
+WHERE [Country key]<>chr(32);
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// 1.3) From M_CUSTOMER_OTD create the tables SHIP_TO and SOLD_TO
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+QUALIFY *;
+UNQUALIFY SID_0CUSTOMER;
+UNQUALIFY SID_YSHIP_TO;
+UNQUALIFY SID_0SOLD_TO;
+
+
+sh:
+LOAD *,
+SID_0CUSTOMER as SID_YSHIP_TO;
+LOAD *
+Resident M_CUSTOMER_L3
+where exists (SID_YSHIP_TO, SID_0CUSTOMER);
+
+RENAME Table sh to M_SHIP_TO;
+
+
+so:
+LOAD *,
+SID_0CUSTOMER as SID_0SOLD_TO;
+LOAD *
+Resident M_CUSTOMER_L3
+//FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Master.Data)$(vG.Sys.Extract.SAPBW.CustomerL3).qvd (qvd)
+where exists (SID_0SOLD_TO, SID_0CUSTOMER);
+
+RENAME Table so to M_SOLD_TO;
+UNQUALIFY *;
+
+DROP field SID_0CUSTOMER;
+DROP Table M_CUSTOMER_L3;
+
+
+M_SOLD_TO_AUX:
+NoConcatenate
+LOAD 
+	*,
+SID_0SOLD_TO as SOLDTOIDENTIFIER
+RESIDENT M_SOLD_TO 
+//Where ([so.Region] <> 'NA')
+;
+
+DROP Table M_SOLD_TO;
+Drop Field SID_0SOLD_TO FROM M_SOLD_TO_AUX;
+
+
+FACTS_JSC_AUX:
+NoConcatenate
+LOAD 
+	*
+RESIDENT FACTS_JSC_AUX1
+WHERE exists (SOLDTOIDENTIFIER, SID_0SOLD_TO);
+
+DROP TABLE FACTS_JSC_AUX1;
+RENAME TABLE FACTS_JSC_AUX TO FACTS_JSC_AUX1;
+
+
+M_SOLD_TO:
+NoConcatenate
+LOAD *,
+SOLDTOIDENTIFIER as SID_0SOLD_TO
+RESIDENT M_SOLD_TO_AUX;
+DROP TABLE M_SOLD_TO_AUX;
+DROP FIELD SOLDTOIDENTIFIER;
+
+
+QUALIFY *;
+UNQUALIFY 'SID_0MATERIAL';
+UNQUALIFY CHANGED;
+UNQUALIFY CHCKFL;
+UNQUALIFY DATAFL;
+UNQUALIFY INCFL;
+UNQUALIFY OBJVERS;
+
+
+m:
+LOAD [Global Material Type], 
+     [Therapeutic area], 
+     Platform, 
+     Classification, 
+     [Demand Brand], 
+     Concentration, 
+     Franchise, 
+     Manufacturer, 
+     SID_0MATERIAL, 
+     Samples, 
+     Strength, 
+     [Base Unit of Measure], 
+     [Brand Name], 
+     [Business Unit], 
+     [Cross-Plant Mft Status], 
+     [Date on which the record was created], 
+     [Deletion flag for all material data of a plant], 
+     [E2 Material/SKU], 
+     [E2E International Brand], 
+     [FG Material type], 
+     [Galenic Form], 
+     [Galenical Form (EU2)], 
+     [Global Brand], 
+     [Global Galenical Form], 
+     [Global Material ID], 
+     [Global Strength], 
+     [Global UOM], 
+     [International Product], 
+     [Inventory Category], 
+     [MDM Conv Factor as numeric], 
+     [MDM Global UOM as uom], 
+     [Material / SKU], 
+     [Material group], 
+     [Material type], 
+     [Medium description], 
+     [Minimum remaining shelf life], 
+     [Pack Size Numeric], 
+     [Product LifeCycle Stage], 
+     [Total shelf life], 
+     [Unit of measure], 
+     Division, 
+     [Global Classification], 
+     [Source System], 
+     Colour_R, 
+     Colour_G, 
+     Colour_B
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+WHERE Exists(SID_0MATERIAL,SID_0MATERIAL);
+
+RENAME TABLE m to AUX_MATERIAL;
+
+UNQUALIFY *;
+
+
+M_MATERIAL:
+NoConcatenate
+LOAD 
+	*
+WHERE exists(SID_0MATERIAL, MATERIALIDENTIFIER);
+
+
+LOAD 
+	*,
+     replace(ltrim(replace([m.Material / SKU],'0',' ')),' ','0') as [m.Material/SKU],
+     SID_0MATERIAL as MATERIALIDENTIFIER
+RESIDENT [AUX_MATERIAL] 
+WHERE ([m.Material type] <> 'EPC');
+
+DROP TABLE [AUX_MATERIAL];
+DROP FIELDS [m.Material / SKU],SID_0MATERIAL FROM M_MATERIAL;
+RENAME FIELDS [m.Material/SKU] to [m.Material / SKU];
+
+
+FACTS_JSC_AUX:
+NoConcatenate
+LOAD 
+	*
+RESIDENT FACTS_JSC_AUX1
+WHERE exists (MATERIALIDENTIFIER, SID_0MATERIAL);
+
+DROP TABLE FACTS_JSC_AUX1;
+
+
+[M_MATERIA/SKU]:
+NoConcatenate
+LOAD 
+	*,
+MATERIALIDENTIFIER AS SID_0MATERIAL
+RESIDENT M_MATERIAL;
+
+DROP TABLE M_MATERIAL;
+DROP FIELD MATERIALIDENTIFIER;
+
+
+CUST_CLASS:
+LOAD so.Customer, 
+     [Cust. Classification]
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)OTD\Filters\FF_CONSUMER_Filter.qvd](qvd);
+
+
+LOAD so.Customer, 
+     [Cust. Classification]
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)OTD\Filters\FF_DISTRIBUTOR_Filter.qvd](qvd);
+
+
+LOAD so.Customer, 
+     [Cust. Classification]
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)OTD\Filters\FF_RUSSIA_Filter.qvd](qvd);
+
+
+LEFT JOIN(M_SOLD_TO) 
+LOAD 
+	*
+RESIDENT CUST_CLASS;
+
+DROP TABLE CUST_CLASS;
+
+
+//3)The rest of customers will be classified as 'Pharma'
+M_MATERIAL_AUX:
+LOAD
+	*,
+	if(len([Cust. Classification]) = 0, 'Pharma', [Cust. Classification]) as [Cust. Class.],
+	replace(ltrim(replace([so.Customer],'0',' ')),' ','0') as [so.Customer_aux]
+RESIDENT M_SOLD_TO;
+
+DROP TABLE M_SOLD_TO;
+RENAME TABLE M_MATERIAL_AUX to M_SOLD_TO;
+
+DROP FIELD [Cust. Classification];
+RENAME FIELD [Cust. Class.] to [Cust. Classification];
+DROP FIELD [so.Customer];
+RENAME FIELD [so.Customer_aux] to [so.Customer];
+
+
+// Remove Cust. Classification <> Pharma
+Left Join (FACTS_JSC_AUX)
+LOAD 
+SID_0SOLD_TO,
+[Cust. Classification]
+Resident M_SOLD_TO;
+
+FACTS_OTD:
+NoConcatenate
+LOAD *
+Resident FACTS_JSC_AUX
+WHERE [Cust. Classification] = 'Pharma'
+;
+
+Drop Field [Cust. Classification] from M_SOLD_TO;
+DROP TABLE FACTS_JSC_AUX;
+
+
+STORE FACTS_OTD into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_OTD.qvd];
+DROP Table FACTS_OTD;

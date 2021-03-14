@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+ <QvdTableHeader>
+   <QvBuildNo>50600</QvBuildNo>
+   <CreatorDoc>D:\Nueva carpeta\Projects\Stock Data\01. Application\Stock Overview - L2 Extractor.qvw</CreatorDoc>
+   <CreateUtcTime>2021-03-07 04:31:10</CreateUtcTime>
+   <SourceCreateUtcTime></SourceCreateUtcTime>
+   <SourceFileUtcTime></SourceFileUtcTime>
+   <SourceFileSize>-1</SourceFileSize>
+   <StaleUtcTime></StaleUtcTime>
+   <TableName>L2_OPERATIONS</TableName>
+   <Fields>
+     <QvdFieldHeader>
+       <FieldName>Operation Stock Name</FieldName>
+       <BitOffset>24</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>17</NoOfSymbols>
+       <Offset>0</Offset>
+       <Length>214</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Operation Stock ID</FieldName>
+       <BitOffset>29</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>17</NoOfSymbols>
+       <Offset>214</Offset>
+       <Length>85</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Stock Amount</FieldName>
+       <BitOffset>34</BitOffset>
+       <BitWidth>6</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>23</NoOfSymbols>
+       <Offset>299</Offset>
+       <Length>203</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Number Titles</FieldName>
+       <BitOffset>40</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>23</NoOfSymbols>
+       <Offset>502</Offset>
+       <Length>115</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Date</FieldName>
+       <BitOffset>61</BitOffset>
+       <BitWidth>1</BitWidth>
+       <Bias>-2</Bias>
+       <NumberFormat>
+         <Type>DATE</Type>
+         <nDec>0</nDec>
+         <UseThou>0</UseThou>
+         <Fmt>YYYYMMDD</Fmt>
+         <Dec></Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>0</NoOfSymbols>
+       <Offset>617</Offset>
+       <Length>0</Length>
+       <Comment></Comment>
+       <Tags></Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Price</FieldName>
+       <BitOffset>0</BitOffset>
+       <BitWidth>0</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>617</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Amount</FieldName>
+       <BitOffset>0</BitOffset>
+       <BitWidth>0</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>622</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Sell Fee</FieldName>
+       <BitOffset>0</BitOffset>
+       <BitWidth>0</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>627</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Date</FieldName>
+       <BitOffset>45</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>DATE</Type>
+         <nDec>0</nDec>
+         <UseThou>0</UseThou>
+         <Fmt>YYYYMMDD</Fmt>
+         <Dec></Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>26</NoOfSymbols>
+       <Offset>632</Offset>
+       <Length>364</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+         <String>$timestamp</String>
+         <String>$date</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Price</FieldName>
+       <BitOffset>8</BitOffset>
+       <BitWidth>4</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>15</NoOfSymbols>
+       <Offset>996</Offset>
+       <Length>131</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Amount</FieldName>
+       <BitOffset>12</BitOffset>
+       <BitWidth>4</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>16</NoOfSymbols>
+       <Offset>1127</Offset>
+       <Length>132</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Buy Fee</FieldName>
+       <BitOffset>16</BitOffset>
+       <BitWidth>4</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>13</NoOfSymbols>
+       <Offset>1259</Offset>
+       <Length>109</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>REALIZ,</FieldName>
+       <BitOffset>0</BitOffset>
+       <BitWidth>0</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>1</NoOfSymbols>
+       <Offset>1368</Offset>
+       <Length>5</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>LATENTE</FieldName>
+       <BitOffset>20</BitOffset>
+       <BitWidth>4</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>15</NoOfSymbols>
+       <Offset>1373</Offset>
+       <Length>127</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Charged Rents</FieldName>
+       <BitOffset>50</BitOffset>
+       <BitWidth>6</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>17</NoOfSymbols>
+       <Offset>1500</Offset>
+       <Length>149</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Operation</FieldName>
+       <BitOffset>62</BitOffset>
+       <BitWidth>1</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>2</NoOfSymbols>
+       <Offset>1649</Offset>
+       <Length>6</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+         <String>$ascii</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Stock Dividend</FieldName>
+       <BitOffset>63</BitOffset>
+       <BitWidth>1</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>2</NoOfSymbols>
+       <Offset>1655</Offset>
+       <Length>6</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+         <String>$ascii</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Operation ID</FieldName>
+       <BitOffset>56</BitOffset>
+       <BitWidth>5</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>REAL</Type>
+         <nDec>14</nDec>
+         <UseThou>1</UseThou>
+         <Fmt>##############</Fmt>
+         <Dec>,</Dec>
+         <Thou></Thou>
+       </NumberFormat>
+       <NoOfSymbols>19</NoOfSymbols>
+       <Offset>1661</Offset>
+       <Length>115</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$text</String>
+         <String>$ascii</String>
+       </Tags>
+     </QvdFieldHeader>
+     <QvdFieldHeader>
+       <FieldName>Key Operation</FieldName>
+       <BitOffset>0</BitOffset>
+       <BitWidth>8</BitWidth>
+       <Bias>0</Bias>
+       <NumberFormat>
+         <Type>INTEGER</Type>
+         <nDec>0</nDec>
+         <UseThou>0</UseThou>
+         <Fmt>0</Fmt>
+         <Dec>,</Dec>
+         <Thou>.</Thou>
+       </NumberFormat>
+       <NoOfSymbols>39</NoOfSymbols>
+       <Offset>1776</Offset>
+       <Length>195</Length>
+       <Comment></Comment>
+       <Tags>
+         <String>$numeric</String>
+         <String>$integer</String>
+       </Tags>
+     </QvdFieldHeader>
+   </Fields>
+   <Compression></Compression>
+   <RecordByteSize>8</RecordByteSize>
+   <NoOfRecords>47</NoOfRecords>
+   <Offset>1971</Offset>
+   <Length>376</Length>
+   <Lineage></Lineage>
+   <Comment></Comment>
+ </QvdTableHeader>
+ Abengoa B BBVA DIA Grupo Ezentis Quabit Red El√©ctrica Espa√±ola Siemens Gamesa Corp. CaixaBank Align Tech. Inc. IAG Xpeng Nio Adaptive Biotech Lordstown Motors Inc. Nikola Motors Inc. AMD Solaria          	                  
+                           )\è¬ı(4@fffffm†@ÖÎQ∏ÖA@H·zÆ5@H·zÆáH@fffffE@
+◊£p=6ü@
+◊£p=
+<@
+◊£p=
+,@∏ÖÎQó@fffffXá@R∏ÖÎe•@ÖÎQ∏~[@q=
+◊£ÑÉ@R∏ÖÎ1S@ÖÎQ∏Âó@q=
+◊£
+£@fffffπ•@ÕÃÃÃÃL®@fffffÉ•@ffffÊ§@fffff∆£@ƒ	    ,                      |  [  ¯  5   -  %   ·  ò   Ê            ê               •  20150824 ]•  20151125 ë¢  20131209 £  20140425 –£  20141024 $§  20150116 Ü§  20150424 F•  20151102 ˜•  20160427 ≠¶  20161026 cß  20170426 Õ°  20130527 b¢  20131023 ÷§  20150713 Z§  20150311 0®  20171117 ÿß  20170821 >ß  20170320 |¶  20160907 ¶  20160517 Ñ®  20180209 n®  20180118 ©  20180705 ä©  20181029 ò™  20190726 ™  20190312 G·zÆGÈ?öôôôôô·?·zÆG· @    333333@ffffff@{ÆG·zÏ?\è¬ı(\ﬂ?öôôôôô˝?     Ä0@>
+◊£pΩ)@öôôôôô@
+◊£p=ri@8EGr˘Áf@J+á@     Êû@öôôôô)è@     À£@    ÖÎQ∏ú@33333î£@q=
+◊£è@ÆG·zLü@ÃÃÃÃÃfÅ@∏  Ã	  33333 ß@33333ß@gfffÊC¶@)\è¬ı~ü@öôôôôô£@ÏQ∏ÖÎ+@)\è¬ı(@      #¿    ÆG·zÓ0@§p=
+◊#+@\è¬ı(‹)@öôôôô*@R∏ÖÎQ*@        ¿1¿ÖÎQ∏û0¿öôôôô*¿    §p=
+◊≠û¿p=
+◊£∆é¿ÕÃÃÃÃÑ{¿    ]è¬ı(,i@ÕÃÃÃÃQê¿öôôôôQp¿·zÆGóÜ@ÖÎQ∏ÓP@ÖÎQ∏ÓT¿R∏ÖÎh¿ç   q=
+◊£Ä\@ÖÎQ∏úÄ@43333≥"@    ÆG·zû]@\è¬ı(\ˇ?\è¬ı(\Ô?>
+◊£p=˙?G·zÆGÈ?è¬ı(\èˆ?¬ı(\è¬Â?)\è¬ı(‹?
+◊£p=‚`@H·zÆG˘?p=
+◊£pÂ?H·zÆGı?ÖÎQ∏ÖÛ?ÆG·z¶g@√ı(\è"T@∏ÖÎQ®g@Y N N Y O1_1 O1_2 O1_3 O1_4 O1_5 O1_6 O1_7 O1_8 O1_9 O2_1 O2_2 O2_3 O2_4 O2_5 O2_6 O2_7 O2_8 O2_9 O2_10                         	   
+                                                                      !   "   #   $   %   &   '            ! ""!B 33!c¡33!Ñ¬33!§√33!√ƒ33!‰≈33!∆	33!#«
+33!F!»DC!g%	33! à) 33!cÀ33!$â,Ã33!§Õ33! »0Œ33!‰œ33!5–	33!#—
+33!F!“UTB(™9 fec,À wvc0Ï33Ñ4 àÉÑ8.	33Ñ<O¡ì3Ñ@p ©ó•Dë> ∫®∆H≤ ÀπÁL” ‹ QÙ Ì€U	˛Ï)Y6C ‹ JQÙ Ì€JU	‹ kQÙ Ì€kU	‹ åQÙ Ì€åU	 ‹ ≠QÙ !Ì€≠U	"‹ ŒQÙ #Ì€ŒU	$‹ ÔQÙ %Ì€ÔU	&‹ RÙ 

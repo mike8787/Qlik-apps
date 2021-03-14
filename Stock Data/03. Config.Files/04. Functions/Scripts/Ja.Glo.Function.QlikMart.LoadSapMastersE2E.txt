@@ -1,0 +1,157 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD dimensions from business area
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sap_dimensions(_CubeArea)
+//This function loads al the dimension qvds relating to the indicated business Area
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_cubeArea: Analitical area (currently Demand or Inventory)
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+SUB _load_sap_dimensions_E2E(_CubeArea)
+
+	//Read QVD info
+	SYS_CUBES:
+	LOAD 'AND ('&concat(Object_Name&'=1',' or ')&')' as CubeAreasToLoadDim
+	FROM
+	[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SAP.Name)]
+	(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Cubes))
+	//Just stored cubes from _CubeArea
+	WHERE In_E2E_QLikMart='Yes' and not isnull(Last_stored_Layer) and Extractor_Type='$(_CubeArea)';
+	//In this variable we will store the cubes belonging to the bussiness area (demand or inventory) so we will load ony dimensions related to that cubes
+	LET vSys.CubeAreasToLoadDim = Peek('CubeAreasToLoadDim', 0, 'SYS_CUBES');
+	TRACE $(vSys.CubeAreasToLoadDim);
+
+	//Read QVD info
+	SYS_CUBES_NAME_AND_LAYER:
+	LOAD Master_Table,
+		 Field_ID,
+		 Mapping_Field_In,
+	     Last_stored_Layer,
+	     Where_Clause,
+		 Qualify_prefix,
+		 Dimension_Desc
+	     
+	FROM
+	[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SAP.Name)]
+	(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Dim))
+	//Just active star Dimensions and just the ones related to the bussines selected area (_CubeArea)
+	WHERE Last_stored_Layer<>'NA' and not isnull(Last_stored_Layer) and Active_E2E='Yes' and Loading_Type='Star'
+	$(vSys.CubeAreasToLoadDim)
+	;
+	
+	//Count the number of cubes to load
+	LET vSys.Total.FilesToLoad = FieldValueCount('Field_ID');
+	
+	//Load * of each cube
+	FOR vSys.NumberOfMasterDim=0 to ($(vSys.Total.FilesToLoad)-1)
+	
+		//Read the details of the QVD to Load
+		
+		LET vSys.CubeName = Peek('Master_Table', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER');					//Cube QVD name
+		LET vSys.CubeLayer = Peek('Last_stored_Layer', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER'); 			//Stored Layer of the QVD
+		LET vSys.CubeFolder = Peek('Mapping_Field_In', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER'); 			//Folder name in path of the QVD
+		LET vSys.WhereClausule = Peek('Where_Clause', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER'); 				//Where clausule for QVD
+		
+		LET vSys.TableName = Peek('Qualify_prefix', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER');				//Master table name	
+		LET vSys.FinalTableName = 'M_'&upper(replace(Peek('Dimension_Desc', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER'),' ','_'));			//Name of the table in the final model, used in the rename table sentence
+							
+		LET vSys.FieldToRename = Peek('Mapping_Field_In', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER'); 			//key name in the QVD unqualified
+		LET vSys.FieldToRenameQa = '$(vSys.TableName)'&'.'&'$(vSys.FieldToRename)'; 									//key name in the QVD qualified
+		LET vSys.SIDName = Peek('Field_ID', vSys.NumberOfMasterDim, 'SYS_CUBES_NAME_AND_LAYER'); 						//New name of the key so it can link with fact table
+		LET vSys.SIDNameQa = '$(vSys.TableName)'&'.'&'$(vSys.SIDName)'; 												//New name of the key but Qualified
+		
+		//Depending on Layer (1 or 2), set path variable and qvd name
+		IF '$(vSys.CubeLayer)'='L2' then
+			LET vSys.QvdName = '$(vSys.CubeName)_L2.qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)';
+		
+		ELSEIF '$(vSys.CubeLayer)'='L1' then
+			LET vSys.QvdName = '$(vSys.CubeName).qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Master.Data)';
+		
+		END IF;
+
+		//If ID field y link field to Fact table are not equals
+		IF '$(vSys.FieldToRename)'<>'$(vSys.SIDName)' then
+		
+			QUALIFY *;
+			//Unqualify link to facts
+			UNQUALIFY '$(vSys.SIDName)';
+
+			//Unqualift SAP System fields so later we can delete them
+			UNQUALIFY CHANGED;
+			UNQUALIFY CHCKFL;
+			UNQUALIFY DATAFL;
+			UNQUALIFY INCFL;
+			UNQUALIFY OBJVERS;
+			
+			//Load * sentence of that cube
+			[$(vSys.TableName)]:
+			LOAD *,
+				'$(vSys.FieldToRename)' as '$(vSys.SIDName)'
+			FROM $(vSys.QvdPath)$(vSys.QvdName) (qvd)
+			//Where clausule from metadata excel
+			$(vSys.WhereClausule)
+			;
+
+			DROP FIELD '$(vSys.FieldToRenameQa)';
+			UNQUALIFY *;
+			
+			
+		ELSE 
+			QUALIFY *;
+			//Unqualify link to facts
+			UNQUALIFY '$(vSys.FieldToRename)'; 
+
+			//Unqualift SAP System fields so later we can delete them
+			UNQUALIFY CHANGED;
+			UNQUALIFY CHCKFL;
+			UNQUALIFY DATAFL;
+			UNQUALIFY INCFL;
+			UNQUALIFY OBJVERS;
+			
+			//Load * sentence of that cube
+			[$(vSys.TableName)]:
+			LOAD *
+				
+			FROM $(vSys.QvdPath)$(vSys.QvdName) (qvd)
+			//Where clausule from metadata excel
+			$(vSys.WhereClausule);
+			
+			UNQUALIFY *;
+			
+		
+		ENDIF;
+
+		//Rename table sentence
+		RENAME TABLE '$(vSys.TableName)' TO '$(vSys.FinalTableName)';
+
+	NEXT vSys.NumberOfMasterDim;
+	
+	//Drop used table
+	DROP TABLE SYS_CUBES_NAME_AND_LAYER;
+	DROP TABLE SYS_CUBES;
+	//Drop used variables
+	LET vSys.NumberOfMasterDim =  null();
+	LET vSys.Total.FilesToLoad = null();
+	LET vSys.CubeName = null();
+	LET vSys.CubeLayer = null();
+	LET vSys.CubeFolder = null();
+	LET vSys.QvdName = null();
+	LET vSys.QvdPath = null();
+	LET vSys.TableName = null();
+	LET vSys.WhereClausule = null();
+	LET vSys.SIDName = null();
+	LET vSys.FieldToRename = null();
+	LET vSys.TableName = null();
+	LET vSys.FieldToRenameQa = null();
+	LET vSys.SIDNameQa = null();
+	LET _CubeArea = null();
+	LET vSys.CubeAreasToLoadDim = null();
+	LET vSys.FinalTableName = null();
+
+END SUB;

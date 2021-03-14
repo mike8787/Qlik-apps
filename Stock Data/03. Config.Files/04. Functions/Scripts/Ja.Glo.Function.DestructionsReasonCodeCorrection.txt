@@ -1,0 +1,83 @@
+  ////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION  Reason code correction on L2 QVD
+//----------------------------------------------------------------------------------------------
+//Example: call _Change_FF_L2_GlobalReasonCode(_qvdPathL1,_qvdNameL1,_qvdNameL2,_qvdPathMaster,_qvdNameMaster)
+//This function Corrects the reason code in the L2 qvd data from Teradata, the correct Reason code comes from a FF in L1 named Reason Code Correction
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+// _qvdPathL1 : Path where the QVD generated in L1 from the FF with the list of destructions with the correct reason code is stored.
+// _qvdNameL1 : Name of the destructions qvd in L1.
+// _qvdNameL2 : QVD with the destruction data from Teradata
+// _qvdPathMaster : Path where the QVD with the  Material Master Data is stored.  
+// _qvdNameMaster : Name of the QVD  with the Material Master Data.
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+SUB _Change_FF_L2_GlobalReasonCode(_qvdPathL1,_qvdNameL1,_qvdNameL2,_qvdPathMaster,_qvdNameMaster)
+	
+	IF FileSize('$(_qvdPathL1)$(_qvdNameL1).qvd') > 0 then
+	
+		//MAPPING SID_0MATERIAL in the Master Material data on L2
+		MAP_0MATERIAL_SKU:
+		MAPPING  
+		LOAD DISTINCT
+			SID_0MATERIAL as MAP_SID_0MATERIAL,
+			[Material / SKU] AS MAP_MATERIAL_SKU
+		FROM '$(_qvdPathMaster)$(_qvdNameMaster).qvd' (qvd);
+		
+		//MAPPING REASON CODE CORRECTION in the data from the Reason code correction on L1
+		MAP_REASON_CODE_CORRECTION:
+		MAPPING
+		LOAD DISTINCT
+			Upper(Replace([Source System], ' ', ''))&'-'& replace(ltrim(replace([SKU], '0', ' ')), ' ', 0) &'-'&[Batch Nr]&'-'&[Material Document]&'-'&text(date([Posting Date]))&'-'&round([Qty]) as MAP_KeyMapValReason,
+			[Global Reason Code] as MAP_FlagMapValReason
+		FROM '$(_qvdPathL1)$(_qvdNameL1).qvd' (qvd);
+		
+		//MAPING RESON CODE DESCRIPTION CORRECTION in the data from the Reason code correction on L1
+		MAP_REASON_CODE_DESCRIPTION_CORRECTION:
+		MAPPING
+		LOAD DISTINCT
+			[Global Reason Code] as MAP_GlobalReasonCode,
+			[Global Reason Description] as MAP_GlobalReasonDescription
+		FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)FF_F_DESTR_REASON_CODE.qvd (qvd);
+
+		//MAPING SUPPLY/QUALITY DRIVEN REASON from the Reason code correction on L1
+		MAP_REASON_CODE_DESCRIPTION_SQ_DRIVEN:
+		MAPPING
+		LOAD DISTINCT
+			[Global Reason Code] as MAP_GlobalReasonCodeAndDescription,
+			[Supply/Quality driven] as MAP_SuppyQualityDriven
+		FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)FF_F_DESTR_REASON_CODE.qvd (qvd);
+			
+		//We are creating a new auxiliar field where if the register is in the list for corrections (FF Global reason code correction) Then takes the list values for destruction description and global code, otherwise load the old data.
+		//To link the information between both tables we are using a key with the fields: Source System, Material SKU, Batch, Material Document, Date and Quantity
+		AUX_TABLE:
+		LOAD *, 
+			applymap('MAP_REASON_CODE_DESCRIPTION_SQ_DRIVEN',
+					[Valid Global Reason Code], [Supply/Quality driven]) as [Valid Supply/Quality driven];
+		LOAD *,
+			applymap('MAP_REASON_CODE_CORRECTION',
+				Upper(Replace([Source System], ' ' , ''))&'-'& replace(ltrim(replace(applymap('MAP_0MATERIAL_SKU',SID_0MATERIAL,''), '0', ' ')), ' ', 0) &'-'&[Batch]&'-'&[Material Document]&'-'&text([Date])&'-'&round([Quantity Destr]),
+					[Global Reason Code]) as [Valid Global Reason Code]
+			,applymap('MAP_REASON_CODE_DESCRIPTION_CORRECTION',
+				applymap('MAP_REASON_CODE_CORRECTION',
+					Upper(Replace([Source System], ' ' , ''))&'-'& replace(ltrim(replace(applymap('MAP_0MATERIAL_SKU',SID_0MATERIAL,''), '0', ' ')), ' ', 0) &'-'&[Batch]&'-'&[Material Document]&'-'&text([Date])&'-'&round([Quantity Destr]),
+						[Global Reason Code]),
+							[Global Reason Description]) as [Valid Global Reason Description]
+		Resident '$(_qvdNameL2)';
+		
+		DROP TABLE '$(_qvdNameL2)';
+		
+		Drop Fields [Global Reason Description],[Global Reason Code], [Supply/Quality driven] from AUX_TABLE;
+		
+		//Rename the fields to link the information with the other tables 
+		Alias [Valid Global Reason Description] as [Global Reason Description],[Valid Global Reason Code] as [Global Reason Code], [Valid Supply/Quality driven] as [Supply/Quality driven];
+		'$(_qvdNameL2)':
+		LOAD * Resident AUX_TABLE;
+
+		DROP TABLE AUX_TABLE;
+		
+	END IF 
+END SUB

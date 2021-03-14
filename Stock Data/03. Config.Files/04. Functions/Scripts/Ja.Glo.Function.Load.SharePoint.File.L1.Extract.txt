@@ -1,0 +1,85 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD table from SharePoint 
+//----------------------------------------------------------------------------------------------
+//Example: call _load_SharePointTable(_Metadata.SP.Path,_Metadata.SP.Name,_SheetTable,_TableName,_LoadingExpression,_SP.Path,_ConConfigSentence, _StorePath,_WhereSentenceTable)
+//This function loads and stores a table from a defined sharepoint path using de config params provided in the metadata excel
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+// to be explained (similar to Flat file L1 extract function)
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+SUB _load_SharePointTable(_Metadata.SP.Path,_Metadata.SP.Name,_SheetTable,_TableName,_LoadingExpression,_SP.Path,_ConConfigSentence, _StorePath,_WhereSentenceTable)
+
+	//1.) Set load param (load field_raw as field_name)
+	SYS_METADATA_TO_LOADSENTENCE:
+	LOAD 
+		 Concat(Trim(Replace(Source_Formula,'_x005F',''))& ' as ' & Trim(Output_Field), ','&chr(13) ,Order) as LoadSentence   // Replace(Source_Formula,'_x005F','') >>>>> needed to prevent excel unicode escape
+	FROM [$(_Metadata.SP.Path)$(_Metadata.SP.Name)]
+	(ooxml, embedded labels, table is $(_SheetTable))
+	WHERE Load_Indicator='Yes'
+	;
+	//Set load variable
+	LET vG.Sys.Extract.SharePoint.LoadSentence = Peek('LoadSentence', 0, 'SYS_METADATA_TO_LOAD');
+	LET vG.Sys.Extract.SharePoint.WhereSentence = Peek('WhereSentence', 0, 'SYS_METADATA_TO_LOAD');
+	//Drop table
+	DROP table SYS_METADATA_TO_LOADSENTENCE;
+	
+	//2.) Set Where Param
+	SYS_METADATA_TO_LOAD:
+	LOAD Concat('WHERE '&Trim(Replace(Source_Field,'_x005F',''))& ' '&Trim(Where_Clausule), ' and '  ,Order) as WhereSentence
+	FROM [$(_Metadata.SP.Path)$(_Metadata.SP.Name)]
+	(ooxml, embedded labels, table is $(_SheetTable))
+	WHERE Where_Condition = 'Yes';
+	//Set where variable
+	LET vG.Sys.Extract.SharePoint.WhereSentence = Peek('WhereSentence', 0, 'SYS_METADATA_TO_LOAD');
+	//Drop table
+	DROP table SYS_METADATA_TO_LOAD;
+	
+	//3.) Set Group by param
+	SYS_METADATA_TO_LOAD:
+	LOAD Concat('GROUP BY '&Trim(Replace(Source_Field,'_x005F','')), ','  ,Order) as GroupSentence
+    	FROM [$(_Metadata.SP.Path)$(_Metadata.SP.Name)]
+	(ooxml, embedded labels, table is $(_SheetTable))
+	WHERE Group_By_Condition = 'Yes';
+	//Set group by variable
+	LET vG.Sys.Extract.SharePoint.GroupSentence = Peek('GroupSentence', 0, 'SYS_METADATA_TO_LOAD');
+	//Drop table
+	DROP table SYS_METADATA_TO_LOAD;
+		
+	//4.) For each file, load its fields using the param variables
+	[$(_TableName)]:
+	$(_LoadingExpression)
+	LOAD  $(vG.Sys.Extract.SharePoint.LoadSentence) //Load variable
+				
+	From $(_SP.Path)
+	     $(_ConConfigSentence)
+	     $(vG.Sys.Extract.SharePoint.WhereSentence)			//Where variable defined in metadata at field level
+	     $(vG.Sys.Extract.SharePoint.GroupSentence)			//Group by variable
+	     ;
+				
+	//5.)Store Qvd Layer 1 and drop table
+	//If its a normal load, just store the table without reprocessing it
+	IF '$(_WhereSentenceTable)'=''  then 
+			STORE $(_TableName) into '$(vG.Sys.Extract.SharePoint.StorePath)$(_TableName).qvd' (qvd);
+			DROP Table $(_TableName);
+	//if we have a where filtering param, set an extra where sentence (curently just applying in crosstable ff)
+	//Normaly this could be possible with just one single load, but since we have crosstable loads and we want
+	// to filter by some crosstable fields, its necessary to make a new pseudo-step
+	ELSE  
+			[$(_TableName)_2]:
+			NOCONCATENATE LOAD * RESIDENT  [$(_TableName)]
+			$(_WhereSentenceTable)
+			;
+			STORE $(_TableName)_2 into '$(vG.Sys.Extract.SharePoint.StorePath)$(_TableName).qvd' (qvd);
+			DROP Table $(_TableName);
+			DROP Table $(_TableName)_2;	
+	ENDIF;
+	
+	//Set this QVD as last Stored QVD with data
+	LET vQVDAnt = '$(vG.Sys.Extract.SharePoint.StorePath)$(_TableName).qvd';
+
+END SUB;

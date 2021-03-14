@@ -1,0 +1,65 @@
+//Module to provide data for all until current month in Escalations and Stock Outs metric. Where the target is 0, and having no data is like being in the target.
+//For those YearMonths that are no data, dummy data is given as 0 values for Actual field, and 2 for Status (green).
+F_DUMMY_FACTS:
+LOAD '1' as AuxiliarLink,
+	 YearMonth,
+	 Min(Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD')) as Date
+Resident M_CALENDAR
+Where PerType = 0 and Num(Date#(Date,'YYYYMMDD')) < Num(MonthStart(Today()))
+Group By YearMonth
+;
+
+Left Join
+Load Distinct
+	 '1' as AuxiliarLink,
+	  Brand,
+	 '0' as ActualDummy,
+	 '2' as StatusDummy	
+Resident JSC_FACTS;
+
+AUX_DUMMY_FACTS:
+LOAD
+	 '1' as AuxiliarLink,
+	 '51' as [KPI ID], //Escalations
+	 '1' as Tolerance,
+	 '0' as Target
+Resident JSC_FACTS
+Where [KPI ID]='51';	 
+
+AUX_DUMMY_FACTS:
+LOAD
+	 '1' as AuxiliarLink,
+	 '2' as [KPI ID], //Stock Out
+	 '0' as Tolerance,
+	 '0' as Target	 
+Resident JSC_FACTS
+Where [KPI ID]='2';	 
+
+Left Join(F_DUMMY_FACTS)
+Load *
+Resident AUX_DUMMY_FACTS;
+
+Drop Table AUX_DUMMY_FACTS;
+
+Left Join(F_DUMMY_FACTS)
+Load Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,
+	 [KPI ID],
+	 Brand,
+	 Status as StatusAux,
+	 Actual as ActualAux 
+Resident JSC_FACTS
+Where [KPI ID]='2' or [KPI ID]='51';
+
+
+Concatenate(JSC_FACTS)
+LOAD Date,
+	 Brand,
+	 if(isNull(ActualAux), ActualDummy, ActualAux) as Actual,
+	 if(isNull(StatusAux), StatusDummy, StatusAux) as Status,
+	 [KPI ID],
+	 Tolerance,
+	 Target
+Resident F_DUMMY_FACTS;
+
+
+Drop Table F_DUMMY_FACTS;	 

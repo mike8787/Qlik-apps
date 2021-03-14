@@ -1,0 +1,184 @@
+//////////////////////////////////////LOADING Destruction QVD////////////////////////////////////
+// 1. Load Destruction Facts
+// 2. Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+
+//////////////////////////////////////LOADING Destructions QVD////////////////////////////////////
+F_DESTR_AUX:
+LOAD       
+     Applymap('MAP_DATE_DESTDATE',Date(Date#(Date,'DD/MM/YYYY'),'YYYYMMDD')) as Date,
+     [Systems value in USD],
+     SID_0MATERIAL,
+     [Global Reason Description]
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)DESTRUCTIONS_MSEG_PRD_L2.qvd](qvd)
+WHERE Not Len(Applymap('MAP_DATE_DESTDATE',Date(Date#(Date,'DD/MM/YYYY'),'YYYYMMDD'),''))= 0;
+
+
+CONCATENATE(F_DESTR_AUX)
+LOAD   
+     Applymap('MAP_DATE_DESTDATE',Date(Date#(Date,'DD/MM/YYYY'),'YYYYMMDD')) as Date,
+     [Systems value in USD], 
+     SID_0MATERIAL,
+     [Global Reason Description]
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)FF_F_DESTRUCTIONS_L2_20*.qvd](qvd)
+Where Not Len(Applymap('MAP_DATE_DESTDATE',Date(Date#(Date,'DD/MM/YYYY'),'YYYYMMDD'),''))= 0;
+
+
+LEFT JOIN(F_DESTR_AUX)
+LOAD 
+     SID_0MATERIAL,      
+     Upper(Trim([E2E International Brand]))  as Brand,
+     Upper(Trim([Global Brand])) as [B.Global_Brand],
+	 Upper(Trim([Brand Name])) as [B.Local_Brand]
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd);
+
+
+F_DESTR_AUX_2:
+NoConcatenate
+LOAD 
+	Date,
+	Year(Date) as Year,
+	[Systems value in USD],
+	SID_0MATERIAL,
+	[Global Reason Description],
+	ApplyMap('MAP_BRAND_ALIGNMENT', Brand, Brand)  as Brand
+RESIDENT F_DESTR_AUX;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+CONCATENATE (BRAND_QUALITY_CHECK)
+LOAD Distinct 
+	 SID_0MATERIAL as B.SID_Key,
+
+	 Brand as [B.Original_Brand],
+
+	 'Inventory and Destructions Dashboard' as B.Metric_Origin,
+
+	 'DESTRUCTIONS' as B.Metric,
+
+	 Brand as [B.E2E_International_Brand],
+
+	 [B.Global_Brand],
+
+	 [B.Local_Brand],
+
+	 ApplyMap('MAP_BRAND_ALIGNMENT', Brand, Brand)  as [B.Product_Brand],
+
+	 ApplyMap('MAP_BRAND_ALIGNMENT', Brand, ApplyMap('MAP_BRAND_E2E', Brand, ''))  as [B.E2E_International_Brand_Brand_Aligmnet]
+	 
+RESIDENT F_DESTR_AUX
+WHERE not len(Date)*len([Brand])=0;
+
+DROP TABLE F_DESTR_AUX;
+
+RENAME TABLE F_DESTR_AUX_2 to F_DESTR_AUX;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//The following table is pulling Actual values from Inventory data in order to use them as Destructions target.
+//Inventory values are deployed in a quarterly basis but monthly for Destructions. The logics to follow to compare Destructions vs. Inventory are 
+F_DESTR_AUX2:
+NoConcatenate
+LOAD Date,
+	Year(Date) as Year,
+	Brand,
+	sum([Systems value in USD]) as Actual,
+	//(sum([Systems value in USD])/Only(Actual_Target))-1 as Deviation,
+	//Only(Actual_Target) as Actual_Target,
+	ApplyMap('MAP_TARGETS_DESTR_INV',Brand& '|' &Date(Addmonths(Date,-2),'YYYYMMDD'), null()) as Actual_Inventory,//Imported inventory Actual from the module for each yearmonth. Destructions targets are based on this Inventory values.
+	9 as [KPI ID]
+RESIDENT F_DESTR_AUX
+WHERE not (len(Brand)*len(Date)=0 or len([Systems value in USD])=0)
+GROUP BY Date, Brand;
+
+STORE F_DESTR_AUX2 INTO [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)destructions_test_0.qvd];
+
+F_DESTR_AUX21:
+LOAD
+	*,
+	Year&'#'&Brand as [Key Reason]
+RESIDENT F_DESTR_AUX2;
+
+DROP TABLE F_DESTR_AUX2;
+
+
+//Sum of destructions grouped by [Global Reason Description], Brand and Year. Needed for VSM Report table.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+M_DESTR_REASONS_AUX:
+NoConcatenate
+LOAD 
+	Year,
+	Brand,
+	[Global Reason Description],
+	sum([Systems value in USD]) as VSM.Destructions
+RESIDENT F_DESTR_AUX
+WHERE not (len(Brand)*len(Year)=0 or len([Systems value in USD])=0)
+GROUP BY Year, Brand, [Global Reason Description];
+
+
+DROP TABLE F_DESTR_AUX;
+
+M_DESTR_REASONS:
+LOAD
+	Year&'#'&Brand as [Key Reason],
+	[Global Reason Description],
+	VSM.Destructions
+RESIDENT M_DESTR_REASONS_AUX;
+
+DROP TABLE M_DESTR_REASONS_AUX;
+
+
+//Adding the corresponding targets and tolerances for each year from KPI Thresholds. And then calculating targets and tolerances quantities based on Inventory Actuals
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+LEFT JOIN(F_DESTR_AUX21)
+LOAD [KPI ID],
+     YEAR as Year, 
+     TARGET as Target,
+     TOLERANCE as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+WHERE [KPI ID]=9; // or [KPI ID]=7 or [KPI ID]=8; Not being used anymore as per business requirements
+
+
+F_DESTR:
+LOAD
+	[KPI ID],
+	Date,
+	Year,
+	Brand,
+	[Key Reason],
+	Actual,
+	Target,
+	Tolerance,
+	Actual_Inventory,
+	Actual_Inventory*Target as Actual_Target, //Value of target in $ for line chart
+	Actual_Inventory*Tolerance as Actual_Tolerance //Value of tolerance destructions in $ for linechart
+RESIDENT F_DESTR_AUX21;
+DROP TABLE F_DESTR_AUX21;
+
+
+F_DESTR_AUX3:
+LOAD
+	*,
+	Actual/Actual_Inventory as Actual_Destr_Percentage //Percentage of destructions value over inventory value.
+RESIDENT F_DESTR;
+DROP TABLE F_DESTR;
+
+
+F_DESTR_AUX4:
+LOAD
+	*,
+	$(v.StatusEvaluation(6, Actual_Destr_Percentage, Target, Tolerance)) as Status
+RESIDENT F_DESTR_AUX3;
+DROP TABLE F_DESTR_AUX3;
+
+
+
+CONCATENATE(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+RESIDENT F_DESTR_AUX4;
+DROP TABLE F_DESTR_AUX4;

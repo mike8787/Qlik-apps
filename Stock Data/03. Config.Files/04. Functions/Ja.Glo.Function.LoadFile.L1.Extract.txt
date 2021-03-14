@@ -1,0 +1,192 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD table from file
+//----------------------------------------------------------------------------------------------
+//Example: call _load_FlatFile(_Metadata.FlatFile.Path,_Metadata.FlatFile.Name,_SheetTable,_TableName,_LoadingExpression,_Flat.FilePath,_ConConfigSentence, _StorePath,_WhereSentenceTable,_Periodicity,_ETLCode)
+//This function loads and stores a table from a defined base file using de config params providen in the metadata excel
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//Base file to load information
+//	_Flat.FilePath, 	 //Path to Raw file	
+//Metadata config file information
+//	_Metadata.FlatFile.Name	 //File where field loading is defined
+//	_Metadata.FlatFile.Path  //Path to field loading file
+//	_SheetTable	   //Sheet where field loading is defined
+//	_date		   //date value from file name
+//Store information
+//	_TableName 	   //table name to store
+//  _LoadingExpression //Loading expression like Crosstable, Hierarchy, Normal Load
+//	_Flat.FilePath     //Qvd store path
+//  _ConConfigSentence //Connection Configuration to access data in the flat file
+//  _StorePath         // Path for storing QVD generated
+//	_WhereSentence		//Optional where sentence
+//  _Periodicity		//Monthly, yearly or just a plain file
+//	_ETLCode		//Internal ETL code of the Flat file
+//  _Naming_TIMEend   //FLAG If the file has the following format name: Namefile_YYYYMMDDHHHMM 
+// _FlatFileName // Name of the flat file
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//NOTES
+//----------------------------------------------------------------------------------------------
+//vQVDAnt variable is used to store fictitious monthly data by storing last valid montly QVD into
+//current month. Is set and also updated (on a file basis) in the qvw JSC - L1 - SAP BW SQL Extractor FLAT FILES
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_FlatFile(_Metadata.FlatFile.Path,_Metadata.FlatFile.Name,_SheetTable,_TableName,_LoadingExpression,_Flat.FilePath,_ConConfigSentence, _StorePath,_WhereSentenceTable,_Periodicity,_ETLCode)
+
+
+		//1.) Set load param (load field_raw as field_name)
+		SYS_METADATA_TO_LOAD:
+		LOAD Concat(Trim(Source_Formula)& ' as ' & Trim(Output_Field), ',' ,Order) as LoadSentence
+		FROM [$(_Metadata.FlatFile.Path)$(_Metadata.FlatFile.Name)]
+		(ooxml, embedded labels, table is $(_SheetTable))
+		WHERE Load_Indicator='Yes'
+		;
+		//Set load variable
+		LET vG.Sys.Extract.FlatFiles.LoadSentence = Peek('LoadSentence', 0, 'SYS_METADATA_TO_LOAD');
+
+		//Drop table
+		DROP table SYS_METADATA_TO_LOAD;
+		
+		//2.) Set Where Param
+		SYS_METADATA_TO_LOAD:
+		LOAD Concat('WHERE '&Trim(Source_Field)& ' '&Trim(Where_Clausule), ' and '  ,Order) as WhereSentence
+		FROM [$(_Metadata.FlatFile.Path)$(_Metadata.FlatFile.Name)]
+		(ooxml, embedded labels, table is $(_SheetTable))
+		WHERE Where_Condition = 'Yes';
+		//Set where variable
+		LET vG.Sys.Extract.FlatFiles.WhereSentence = Peek('WhereSentence', 0, 'SYS_METADATA_TO_LOAD');
+		//Drop table
+		
+
+
+		DROP table SYS_METADATA_TO_LOAD;
+		
+		//3.) Set Group by param
+		SYS_METADATA_TO_LOAD:
+		LOAD Concat('GROUP BY '&Trim(Source_Field), ','  ,Order) as GroupSentence
+	    	FROM [$(_Metadata.FlatFile.Path)$(_Metadata.FlatFile.Name)]
+		(ooxml, embedded labels, table is $(_SheetTable))
+		WHERE Group_By_Condition = 'Yes';
+		//Set group by variable
+		LET vG.Sys.Extract.FlatFiles.GroupSentence = Peek('GroupSentence', 0, 'SYS_METADATA_TO_LOAD');
+		//Drop table
+
+
+
+
+		DROP table SYS_METADATA_TO_LOAD;
+
+
+
+IF FileSize('$(_Flat.FilePath)') > 0 then
+
+	
+
+		//4.) For each file, load its fields using the param variables
+		[$(_TableName)]:
+		$(_LoadingExpression)
+		LOAD  $(vG.Sys.Extract.FlatFiles.LoadSentence) //Load variable
+					
+		From $(_Flat.FilePath)
+		     $(_ConConfigSentence)
+		     $(vG.Sys.Extract.FlatFiles.WhereSentence)			//Where variable defined in metadata at field level
+		     $(_WhereSentence)									//Specific where sentence via call function
+		     $(vG.Sys.Extract.FlatFiles.GroupSentence)			//Group by variable
+		     ;
+					
+		//5.)Store Qvd Layer 1 and drop table
+		//If its a normal load, just store the table without reprocessing it
+		IF '$(_WhereSentenceTable)'=''  then 
+				STORE $(_TableName) into '$(vG.Sys.Extract.FlatFiles.StorePath)$(_TableName).qvd' (qvd);
+				DROP Table $(_TableName);
+		//if we have a where filtering param, set an extra where sentence (curently just applying in crosstable ff)
+		//Normaly this could be possible with just one single load, but since we have crosstable loads and we want
+		// to filter by some crosstable fields, its necessary to make a new pseudo-step
+		ELSE  
+				[$(_TableName)_2]:
+				NOCONCATENATE LOAD * RESIDENT  [$(_TableName)]
+				$(_WhereSentenceTable)
+				;
+				STORE $(_TableName)_2 into '$(vG.Sys.Extract.FlatFiles.StorePath)$(_TableName).qvd' (qvd);
+				DROP Table $(_TableName);
+				DROP Table $(_TableName)_2;	
+		ENDIF;
+		
+		//Set this QVD as last Stored QVD with data
+		LET vQVDAnt = '$(vG.Sys.Extract.FlatFiles.StorePath)$(_TableName).qvd';
+		LET vETLAnt = '$(_ETLCode)';
+		TRACE 'vQVDAnt=  $(vQVDAnt)';
+		TRACE 'vETLAnt=  $(vETLAnt)';
+		
+ELSE 	// If the montly file for the month we are looking at does not exist, we will recreate it using the latest stored one
+		// This automatic Qvd generation takes sense only for monthly conversions FF
+	IF '$(_Periodicity)'='Monthly' and FileSize('$(vQVDAnt)')>0 and '$(_ETLCode)'='CONV' then
+		
+		// check if the last created QVD corresponds to the same ETL, if so copy it as the month current iteration
+		IF '$(_ETLCode)'='$(vETLAnt)' then
+			//...Load last stored QVD and store it as current month data
+			FICT_DATA_TABLE:
+			LOAD *
+			FROM $(vQVDAnt) (qvd);
+			STORE FICT_DATA_TABLE into '$(vG.Sys.Extract.FlatFiles.StorePath)$(_TableName).qvd' (qvd);
+			DROP TABLE FICT_DATA_TABLE;
+
+			LET vQVDAnt = '$(vG.Sys.Extract.FlatFiles.StorePath)$(_TableName).qvd';
+			LET vETLAnt = '$(_ETLCode)';
+
+		// if not, it means we need to look for the most recent aux file starting from the month current iteration 
+		ELSE
+			let vMostRecentFile = null();
+			FOR EACH file in FileList(Left('$(_Flat.FilePath)', len('$(_Flat.FilePath)')-len(Subfield('$(_Flat.FilePath)', '\', -1 )))&'*')
+				let vMostRecentFile = if(Num(Mid(SubField('$(vMostRecentFile)', '\', -1), 13, 6)) < Num(Mid(SubField('$(file)', '\', -1), 13, 6)) 
+										or Num(Mid(SubField('$(_Flat.FilePath)', '\', -1), 13, 6)) < Num(Mid(SubField('$(file)', '\', -1), 13, 6)),
+											'$(vMostRecentFile)', '$(file)' );
+				let vAux = '$(vMostRecentFile)';
+			next file
+
+			[$(_TableName)]:
+			$(_LoadingExpression)
+			LOAD  $(vG.Sys.Extract.FlatFiles.LoadSentence) //Load variable
+						
+			From $(vMostRecentFile)
+			     $(_ConConfigSentence)
+			     $(vG.Sys.Extract.FlatFiles.WhereSentence)			//Where variable defined in metadata at field level
+			     $(_WhereSentence)									//Specific where sentence via call function
+			     $(vG.Sys.Extract.FlatFiles.GroupSentence)			//Group by variable
+			     ;
+			
+			STORE $(_TableName) into '$(vG.Sys.Extract.FlatFiles.StorePath)$(_TableName).qvd' (qvd);
+			DROP Table $(_TableName);
+
+			LET vQVDAnt = '$(vG.Sys.Extract.FlatFiles.StorePath)$(_TableName).qvd';
+			LET vETLAnt = '$(_ETLCode)';
+
+		END IF;
+	
+		
+	END IF;
+	
+ENDIF	
+
+//Drop Sentences
+LET _date = null();
+LET vG.Sys.Extract.FlatFiles.GroupSentence = null();
+LET vG.Sys.Extract.FlatFiles.WhereSentence = null();
+LET vG.Sys.Extract.FlatFiles.LoadSentence = null();
+LET _ConConfigSentence = null();
+LET _Flat.FilePath = null();
+LET _LoadingExpression = null();
+LET _TableName = null();
+LET _Metadata.FlatFile.Path = null();
+LET _Metadata.FlatFile.Name = null();
+LET _SheetTable = null();
+LET _LoadingExpression = null();
+LET _emptyFields = null();
+LET _WhereSentence = null();
+LET _Periodicity = null();
+LET _ETLCode = null();
+
+END Sub;

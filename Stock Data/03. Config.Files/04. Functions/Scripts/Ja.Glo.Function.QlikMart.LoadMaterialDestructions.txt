@@ -1,0 +1,26 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION add the info from L2 F_MATERIAL_DESTRUCTIONS qvd to the table M_MATERIAL/SKU
+//----------------------------------------------------------------------------------------------
+//Example: call _load_complementary_material(_qvdPathL2,_qvdNameL2)
+//This function add the information that is missing from L2 F_MATERIAL_DESTRUCTIONS qvd to the table M_MATERIAL/SKU directly in the QlikMart
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+// _qvdPathL2 : L2 Path to F_MATERIAL_DESTRUCTIONS qvd
+// _qvdNameL2 : L2 Name to F_MATERIAL_DESTRUCTIONS qvd
+////////////////////////////////////////////////////////////////////////////////////////////////
+SUB _load_complementary_material(_qvdPathL2,_qvdNameL2)
+	LET vG.Sys.Extract.FlatFiles.DateToday = Today()-1;
+	LET vG.Sys.Extract.FlatFiles.DateEnd = Year($(vG.Sys.Extract.FlatFiles.DateToday));
+	LET vG.Sys.Extract.FlatFiles.DateIni = Year($(vG.Sys.Extract.FlatFiles.DateToday))-3;
+
+	DO while vG.Sys.Extract.FlatFiles.DateIni <= $(vG.Sys.Extract.FlatFiles.DateEnd)
+		IF FileSize('$(_qvdPathL2)$(_qvdNameL2)$(vG.Sys.Extract.FlatFiles.DateIni).qvd') > 0 then
+			CONCATENATE('M_MATERIA/SKU')
+				LOAD *
+				FROM '$(_qvdPathL2)$(_qvdNameL2)$(vG.Sys.Extract.FlatFiles.DateIni).qvd' (qvd);
+		END IF 
+		LET vG.Sys.Extract.FlatFiles.DateIni = vG.Sys.Extract.FlatFiles.DateIni + 1;
+	LOOP
+END SUB 

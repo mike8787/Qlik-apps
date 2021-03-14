@@ -1,0 +1,71 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//CUSTOM SCRIPT MODULE 3
+//FUNCTION: LOAD INLINE FOR DATA ORIGIN DESCRIPTIONS
+//----------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+DATA_SOURCES:
+LOAD * INLINE [
+SOURCE_ID,SOURCE
+1,'Budget Figures NTS'
+2,'Calculated MAPE'
+3,'DP Statistical Actuals'
+4,'DP Statistical Forecast'
+5,'DP Statistical Forecast History'
+6,'Non VMI Forecast'
+7,'Non VMI Actuals - In market'
+8,'Non VMI Purchase Actuals'
+9,'Purchase MAPE'
+10,'Statistical MAPE'
+11,'VMI Actuals'
+12,'VMI Forecast'
+13,'E2E Demand Cube'
+14,'E2E Inventory Affiliate'
+15,'E2E Inventory Cube'
+16,'FF Slob'
+17,'FF Destructions'
+18,'FF Proyected Inventory'
+19,'FF Target Inventory'
+20,'FF DoS Targets'
+21, 'FC Deviation FF'
+22, 'FF Bucket'
+23,	'FF Target by location'
+24,	'FF Target destructions'
+25,	'Demand CoE'
+26, 'FF Teradata'
+50,'Events'
+51,'Net Requirements'
+52,'Supply'
+53,'Absorptions'
+54,'Capacity'
+55,'Supply v2'
+200, 'Stock Outs'
+201, 'New Launches'
+202, 'LIFR'
+203, 'DoS'
+250, 'ASI Survey Results'
+251, 'ASI Contact List'
+252, 'Graphics Cost'
+253, 'Graphics Delivery'
+254, 'Graphics Quality'
+500, 'SCR Main Facts'
+550, 'USF BRAND CYCLE FORECAST'
+551, 'USF BRAND UNIT FORECAST'
+552, 'USF BRAND INFO'
+
+];
+
+
+
+
+
+
+
+
+
+
+
+

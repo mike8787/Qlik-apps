@@ -1,0 +1,73 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//MODULE L2 FF
+//MAPPING LOAD all the customer-material ABC indicators by SID_Key
+//Used in the Master Material-Customer Static Demand master
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//Load and prepare the information (base table) of the future mapping table
+
+//Load meta tables info just for FC Deviation FF
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.Name)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the FC deviation ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='FC_DATA';
+
+//Set data variables (FC deviation is set on a monthly basis)
+LET vG.Sys.Extract.FlatFiles.DateToday = Today()-1;
+LET vG.Sys.Extract.FlatFiles.DateEnd = Num(MakeDate(Year($(vG.Sys.Extract.FlatFiles.DateToday)), Num(Month($(vG.Sys.Extract.FlatFiles.DateToday)))));
+LET vG.Sys.Extract.FlatFiles.DateIni = Num(AddMonths(vG.Sys.Extract.FlatFiles.DateEnd,-36));
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+LET vG.Sys.Extract.FlatFiles.L2StorePath = replace('$(vG.Sys.Extract.FlatFiles.L1StorePath)','$(vG.Sys.Path.QVD.Layer1)','$(vG.Sys.Path.QVD.Layer2)');	//Store path of the new L2 Qvd
+
+//Monthly update of the file, Call L2 function for each month
+DO while vG.Sys.Extract.FlatFiles.DateIni <= $(vG.Sys.Extract.FlatFiles.DateEnd)
+
+	LET vG.Sys.Extract.FlatFiles.YearMonthIni = Year($(vG.Sys.Extract.FlatFiles.DateIni))&Num(Month($(vG.Sys.Extract.FlatFiles.DateIni)),'00');
+	LET vG.Sys.Extract.FlatFiles.L1TableNameMonthly = '$(vG.Sys.Extract.FlatFiles.TableName)_$(vG.Sys.Extract.FlatFiles.YearMonthIni)'; 
+	LET vG.Sys.Extract.FlatFiles.L2TableNameMonthly = '$(vG.Sys.Extract.FlatFiles.TableName)_L2_$(vG.Sys.Extract.FlatFiles.YearMonthIni)'; 
+	
+	//To create the base mapping table, for each L2 file we load all the different combinations SID-ABC indicator
+	IF FileSize('$(vG.Sys.Extract.FlatFiles.L2StorePath)$(vG.Sys.Extract.FlatFiles.L2TableNameMonthly).qvd') > 0 then
+		BASE_MAPP_FF_MAX_CLASS:
+		LOAD DISTINCT 
+			 [SID_Key],
+			 [Current customer ABC indicator]
+			
+		FROM '$(vG.Sys.Extract.FlatFiles.L2StorePath)$(vG.Sys.Extract.FlatFiles.L2TableNameMonthly).qvd' (qvd);
+	END IF;
+	
+	LET vG.Sys.Extract.FlatFiles.DateIni = Num(AddMonths(vG.Sys.Extract.FlatFiles.DateIni,1));
+	
+LOOP
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//2.) Once we have the base table, we can create the MAPP TABLE
+MAPP_FF_MAX_CLASS:
+LOAD text([SID_Key]) as MAPP_ID_C,
+	 [Current customer ABC indicator] as MAPP_IND_C
+RESIDENT BASE_MAPP_FF_MAX_CLASS;
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//3.) Drop used tables and variables
+DROP TABLE BASE_MAPP_FF_MAX_CLASS;
+
+DROP TABLE SYS_METADATA_TABLES;
+//Delete used variables
+LET vG.Sys.Extract.FlatFiles.TableName = null();
+LET vG.Sys.Extract.FlatFiles.L1StorePath = null();
+LET vG.Sys.Extract.FlatFiles.L2StorePath = null();
+LET vG.Sys.Extract.FlatFiles.DateToday = null();
+LET vG.Sys.Extract.FlatFiles.DateEnd = null();
+LET vG.Sys.Extract.FlatFiles.DateIni = null();
+LET vG.Sys.Extract.FlatFiles.YearMonthIni = null();
+LET vG.Sys.Extract.FlatFiles.LoadingFlatFilesPath = null();
+LET vG.Sys.Extract.FlatFiles.L1TableNameMonthly = null();
+LET vG.Sys.Extract.FlatFiles.L2TableNameMonthly = null();

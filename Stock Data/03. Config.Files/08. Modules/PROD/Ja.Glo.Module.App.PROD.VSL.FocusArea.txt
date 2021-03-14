@@ -1,0 +1,46 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////// (APP)VSL Focus Area Update  //////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+FOCUS_AREA:
+LOAD 
+     Upper(Trim([Brand])) as FocusBrand,
+	 Area as FocusArea, 
+     Status as FocusStatus, 
+     Comment as FocusComment,
+     'SID_Focus|'&Upper(Trim(Brand)) as SID_FocusArea
+FROM
+[$(vG.Sys.Path.Auxiliar.VSL)FocusArea.Update*.xlsx]
+(ooxml, embedded labels, table is [Focus Area])
+Where not Len(Brand)*Len(Area)/*Len(Status)*/ = 0;
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////// (APP)VSM PORTAL MASTER ///////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Left (VSM_MASTER)
+VSM:
+First 1   
+LOAD //'SID_VSM|'&Upper(Trim(Brand)) as SID_VSM,
+     'SID_Focus|'&Upper(Trim(Brand)) as SID_FocusArea,
+     [Patent Expiry] as [VSM.Patent Expiry], 
+     [Current Indications] as [VSM.Current Indications], 
+     [Future Indications] as [VSM.Future Indications], 
+     Launches as VSM.Launches, 
+     [Escalations and Issue Mgt] as [VSM.Escalations and Issue Mgt],
+     [Galenical form & Dosage] as [VSM.Galenical form & Dosage],
+     [J&J Territory] as [VSM.J&J Territory],
+     [Comment Product One Pager] as VSM.Comment.POP,
+     [Comment Financial One Pager] as VSM.Comment.FOP
+FROM
+[$(vG.Sys.Path.Auxiliar.VSL)FocusArea.Update*.xlsx]
+(ooxml, embedded labels, table is [Product Details], filters(
+Transpose()
+));
+
+
+JOIN(FOCUS_AREA)
+LOAD
+	*
+Resident VSM;
+
+Drop Table VSM;

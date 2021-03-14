@@ -1,0 +1,120 @@
+//////////////////////////////////////LOADING ESCALATIONS////////////////////////////////////
+// Load Escalations Facts - Coming from SharePoint
+// Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+// Loading only those values that should be taken into account as per business requirements and cleaning "Brand" field
+M_ESCALATIONS_AUX:
+LOAD
+    *,
+    Upper(Replace(Subfield(Replace(Purgechar([Brand],';'),'##','#'),'#'),'_',' ')) as Brand_Aux
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)Escalation\F_SP_ESCALATION.qvd]
+(qvd)
+WHERE [Actual]='Level 2' or [Actual] like '*(PAC)*' or [Actual] like '*(QRB)*';
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim([Brand_Aux])) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand_Aux)),ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand_Aux)), Upper(Trim([Brand_Aux])))) as [B.Product_Brand],
+
+    ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand_Aux)), '') as [B.E2E_International_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand_Aux)),
+            ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand_Aux)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Brand_Aux)), '') as [B.Global_Brand],
+    
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Brand_Aux)), '') as [B.Local_Brand],
+
+    'ESCALATIONS Flatfile' as B.Metric_Origin,
+    
+    'ESCALATIONS' as B.Metric
+Resident M_ESCALATIONS_AUX
+WHERE LEN(TRIM(Brand_Aux))>'0' and not IsNum(Brand_Aux);
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+// Mapping Brand names from Brand Alignment file
+M_ESCALATIONS_AUX_2:
+Load 
+    *,
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand_Aux)),ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand_Aux)), Upper(Trim([Brand_Aux])))) as Brand_Aux_2
+Resident M_ESCALATIONS_AUX;
+
+Drop Table M_ESCALATIONS_AUX;
+Drop Field Brand_Aux;
+Rename Field Brand_Aux_2 to Brand_Aux;
+Rename Table M_ESCALATIONS_AUX_2 to M_ESCALATIONS_AUX;
+
+
+M_ESCALATIONS_AUX_1:
+NoConcatenate
+LOAD
+    *,
+    '1' as [Counter Escalations],
+    Date#(Right(Year(Date),4)&Num(Month(Date),'00'),'YYYYMM') as YearMonth
+    //Date(Date#(Right(Year(Date),4)&Num(Month(Date),'00'),'YYYYMM'),'YYYYMMDD') as Date_Aux,
+    //Date(Date, 'YYYYMMDD') as DateTest
+RESIDENT M_ESCALATIONS_AUX
+WHERE LEN(TRIM(Brand_Aux))>'0' and not IsNum(Brand_Aux);
+
+DROP TABLE M_ESCALATIONS_AUX;
+
+
+M_ESCALATIONS:
+LOAD
+    Brand_Aux,
+    YearMonth,
+    Sum([Counter Escalations]) as [Actual]
+RESIDENT M_ESCALATIONS_AUX_1
+GROUP BY [Brand_Aux], YearMonth;
+
+DROP TABLE M_ESCALATIONS_AUX_1;
+
+
+M_ESCALATIONS_FINAL:
+NoConcatenate
+Load Brand_Aux As Brand,
+     Date(Date#(YearMonth&'01','YYYYMMDD'),'YYYYMMDD')  as Date,
+     Actual,
+     Left(YearMonth,4) as Year,
+     '51' As [KPI ID]
+RESIDENT M_ESCALATIONS;
+
+DROP TABLE M_ESCALATIONS;
+
+
+Left Join (M_ESCALATIONS_FINAL)
+LOAD [KPI ID],
+     YEAR as Year, 
+     TARGET as Target,
+     TOLERANCE as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=51; // 51 is the KPI ID assigned for Escalations in Layer 1 Extractor (Hard Coded)
+
+//DROP Field Year;
+
+
+M_ESCALATIONS_FINAL_1:
+LOAD *,
+    $(v.StatusEvaluation(7, Actual, Target, Tolerance)) as Status
+Resident M_ESCALATIONS_FINAL;
+
+DROP Table M_ESCALATIONS_FINAL;
+
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident M_ESCALATIONS_FINAL_1;
+
+DROP Table M_ESCALATIONS_FINAL_1;
+
+

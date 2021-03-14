@@ -1,0 +1,55 @@
+// Facts a coming from SharePoint tables
+
+$(Must_Include=$(vG.Sys.Path.Config.Functions)Ja.Glo.Function.L2.LoadSharePointFiles.txt);
+
+FACTS_SP:
+LOAD * INLINE [
+    dummy
+    1];
+
+call _load_SharePoint_Files('PROD','$(vG.Sys.Doc.Metadata.SharePoint.PROD)','$(vG.Sys.Doc.Metadata.Sheet.SharePoint)')
+
+DROP Field dummy;
+
+F_SP:
+NoConcatenate
+LOAD  
+     Date(Date#(Left(MeasurementDate,10),'YYYY-MM-DD'),'YYYYMMDD') as MeasurmentDate,
+     Date(MonthStart(Today()),'YYYYMMDD') as Date,
+     Value as Actual,
+     Value# as Status,
+     Num(Target, '#,###.0') as Target,
+     Num(Target, '#,###.0') as Tolerance,
+     MeasurementComments as Comment,
+     //TextBetween(Replace(MeasurementComments,'amp;',''), '>','<') as Comment,
+     ProductId,
+     StageGateId,
+     MoreSpecific as [More Specific],
+     NewMetric as [SG12 New Metric],
+     SOURCE_ID as [KPI ID]
+Resident FACTS_SP
+WHERE not len(MeasurementDate)*len(StageGateId)*len(ProductId)=0 and StageGateId <> 21
+; // StageGateID 21 is for Launch
+
+LEFT JOIN (F_SP)
+LOAD Distinct
+	ProductId,
+	Upper(Trim(ProductName))& If(Len(ProductStrength) > 0, '-'&Upper(Trim(ProductStrength)))& If(Len(AdditionalClarification) > 0,'-'&Upper(Trim(AdditionalClarification))) as Brand
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_PRODUCT.qvd]
+(qvd); 
+//DROP Field ProductId;
+
+DROP Table FACTS_SP;
+
+
+Concatenate(JSC_FACTS)
+LOAD *,
+0 as [Commercial Brand],
+1 as [Development Brand]
+Resident F_SP;
+//Where Wildmatch(Brand,'TEST*'); //Comment this line once development brands will be fixed.
+DROP Table F_SP;
+
+//STORE F_INV into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_INV.qvd];
+//DROP Table F_INV;
+

@@ -1,0 +1,114 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD SAP CUBES Layer 3 (Inventory)
+//----------------------------------------------------------------------------------------------
+//Example: call _load_SAP_Cubes_Inv_L3(_vQvdToExtract)
+//This function Generates Layer.3 SAP qvds from Inventory based in the ones from Layer 2
+//The Demand info at SKU level for DoS calculation is added here
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_vQvdToExtract : Inventory cube QVD name to extract
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+SUB _load_SAP_Cubes_Inv_L3.1(_vQvdToExtract)
+		
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Phase 1: Get for each Global ID that is not a FG, their relevants FG and the conversions and offsets already pre summed/multiplicated 
+	//(see FF extraction Layer 2 for conversions for futher details)
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	[BASE_MAPP_$(_vQvdToExtract)_L2.5]:
+	LOAD applymap('MAPP_GLOBAL_ID_SID_REL',SID_0MATERIAL,1) as GLOBAL_ID,
+		 Date,	
+		[Calendar year / week],
+		 sum(1) as aggr_expr
+		 
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(_vQvdToExtract)_L2.qvd (qvd)
+	GROUP BY [Calendar year / week],applymap('MAPP_GLOBAL_ID_SID_REL',SID_0MATERIAL,1),Date;
+	
+	//Drop aggr field
+	DROP FIELD aggr_expr;
+	
+	//Left join to get all the final childs and the relevant conversions
+	LEFT JOIN (BASE_MAPP_$(_vQvdToExtract)_L2.5) 
+	LOAD 	C.SKU_FROM 			as GLOBAL_ID,
+			Date,
+			C.CONVERSION_FACTOR	as CONVERSION_FACTOR, 
+			C.LEAD_TIME			as LEAD_TIME,
+			C.SKU_TO 			as BASE_FG_ID
+			
+	RESIDENT FF_CONVERSIONS;
+	
+	//Store table
+	STORE BASE_MAPP_$(_vQvdToExtract)_L2.5 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)BASE_MAPP_$(_vQvdToExtract)_L2.5.qvd (qvd);
+	DROP TABLE BASE_MAPP_$(_vQvdToExtract)_L2.5;
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Phase 2: Get the demand at global material Id level applying the conversions and offsets
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	[BASE_MAPP_$(_vQvdToExtract)_L2.6]:
+	LOAD GLOBAL_ID,
+		 Date,
+		 [Calendar year / week],
+		 BASE_FG_ID&[Calendar year / week] as LINK,
+		 LEAD_TIME+1 as OFFSET,
+		 CONVERSION_FACTOR
+		 //if(isnull(applymap('MAPP_INV_DEMAND_OFF1',BASE_FG_ID&[Calendar year / week],0)),0,applymap('MAPP_INV_DEMAND_OFF1',BASE_FG_ID&[Calendar year / week],0)*CONVERSION_FACTOR) as Dem1
+		 
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)BASE_MAPP_$(_vQvdToExtract)_L2.5.qvd (qvd)
+	;
+	LEFT JOIN (BASE_MAPP_$(_vQvdToExtract)_L2.6)
+	LOAD LINK,
+		DEMAND,
+		OFFSET
+	RESIDENT MAPP_INV_DEMAND_OFF;
+	
+	//Store qvd
+	STORE BASE_MAPP_$(_vQvdToExtract)_L2.6 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)BASE_MAPP_$(_vQvdToExtract)_L2.6.qvd (qvd);
+	DROP TABLE BASE_MAPP_$(_vQvdToExtract)_L2.6;
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Phase 3: group by clausule to get the demand of the parent
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	[BASE_MAPP_$(_vQvdToExtract)_L2.7]:
+	LOAD GLOBAL_ID,
+		 Date,
+		 [Calendar year / week],
+		 //We save the demand so later the if(isnull(DEMAND)) check can be done to identify FGs, will be null if the global ID does not appear in conversions FF
+		 max(DEMAND) as DEMAND_CHECK,
+		sum(DEMAND*CONVERSION_FACTOR) as [FC Demand 12m L3]
+		
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)BASE_MAPP_$(_vQvdToExtract)_L2.6.qvd (qvd)
+	GROUP BY GLOBAL_ID, Date, [Calendar year / week]
+	;
+	
+	//Store qvd
+	STORE BASE_MAPP_$(_vQvdToExtract)_L2.7 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)BASE_MAPP_$(_vQvdToExtract)_L2.7.qvd (qvd);
+	DROP TABLE BASE_MAPP_$(_vQvdToExtract)_L2.7;
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Phase 4: Mapping load of previous table and add values to the inventory cubes via Global material id
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	[MAPP_$(_vQvdToExtract)_L2.7]:
+	MAPPING LOAD text(GLOBAL_ID&[Calendar year / week]) as MAPP_DID1$(_vQvdToExtract),
+				if(isnull(DEMAND_CHECK), 
+				//If the demand is null it means that the Global ID does not appear in conversions ....
+				//.... and that means that is/can be a FG. FG do not have conversions and use an offset 1
+				applymap('MAPP_INV_DEMAND_OFF1_F32',text(GLOBAL_ID&[Calendar year / week]),0)
+				, 
+				//Else, we get the demand as calculated before 
+				//NEW NEW NEW NEW !!! We also use the applymap to include direct Demand related to Bulks/API
+				[FC Demand 12m L3] + applymap('MAPP_INV_DEMAND_OFF1_F32',text(GLOBAL_ID&[Calendar year / week]),0)
+					)	as MAPP_DIND1$(_vQvdToExtract)
+				
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)BASE_MAPP_$(_vQvdToExtract)_L2.7.qvd (qvd);
+	
+	//Delete used function variables
+	LET _vQvdToExtract = null();
+	LET vG.Sys.Extract.Conversions.MaxDepthLoopF = null();
+
+END SUB;
+

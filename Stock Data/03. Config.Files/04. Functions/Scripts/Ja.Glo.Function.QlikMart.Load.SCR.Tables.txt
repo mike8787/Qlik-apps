@@ -1,0 +1,96 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD tables from business area
+//----------------------------------------------------------------------------------------------
+//Example: call _load_SCR_tables(_CubeWhereCondition,_InQlikMartField)
+//This function loads al the QVDs tables from SCR DWH
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//_CubeWhereCondition = 
+//_InQlikMartField = 
+//----------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+sub _load_SCR_tables(_CubeWhereCondition,_InQlikMartField)
+
+	//Read QVD info
+	SYS_tables_NAME_AND_LAYER:
+	LOAD Table_Sheet,
+		Last_stored_Layer,
+		Source_Id,
+		Extractor_Folder,
+		Type,
+		Where_Exists_ID
+		
+	FROM
+	[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SCR.Name)]
+	(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SCR.Tables))
+	//Just related tables
+	WHERE $(_InQlikMartField)='Yes' and not isnull(Last_stored_Layer) and Load_Indicator='Yes';
+	
+	//Count the number of tables to load
+	LET vSys.Total.FilesToLoad = FieldValueCount('Table_Sheet');
+	
+	//Load * of each cube
+	FOR vSys.NumberOftables=0 to ($(vSys.Total.FilesToLoad)-1)
+	
+		//Read the details of the QVD to Load
+		LET vSys.CubeName = Peek('Table_Sheet', vSys.NumberOftables, 'SYS_tables_NAME_AND_LAYER'); 			//QVD name
+		LET vSys.CubeLayer = Peek('Last_stored_Layer', vSys.NumberOftables, 'SYS_tables_NAME_AND_LAYER'); 	//Last Stored Layer
+		LET vSys.SourceId = Peek('Source_Id', vSys.NumberOftables, 'SYS_tables_NAME_AND_LAYER'); 			//Source id
+		LET vSys.Folder = Peek('Extractor_Folder', vSys.NumberOftables, 'SYS_tables_NAME_AND_LAYER'); 		//Stored folder
+		LET vSys.Type = Peek('Type', vSys.NumberOftables, 'SYS_tables_NAME_AND_LAYER'); 					//Type (star/fact)
+		LET vSys.DimID = Peek('Where_Exists_ID', vSys.NumberOftables, 'SYS_tables_NAME_AND_LAYER'); 			//Field ID for Where exists clausule
+
+		//Depending on Layer (1 or 2), set path variable and qvd name
+		IF '$(vSys.CubeLayer)'='L2' then
+			LET vSys.QvdName = '$(vSys.CubeName)_L2.qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vSys.Folder)';
+		
+		ELSEIF '$(vSys.CubeLayer)'='L1' then
+			LET vSys.QvdName = '$(vSys.CubeName)_L1.qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vSys.Folder)';
+
+		ELSEIF '$(vSys.CubeLayer)'='L3' then
+			LET vSys.QvdName = '$(vSys.CubeName)_L3.qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vSys.Folder)';
+		
+		END IF;
+		
+		IF '$(vSys.Type)'='Fact' THEN
+			//Load * sentence of that cube
+			CONCATENATE (FACTS_JSC)
+			LOAD *,$(vSys.SourceId) as SOURCE_ID
+			FROM $(vSys.QvdPath)$(vSys.QvdName) (qvd)
+			//Cube manual condition (where clausules for dates of specific fields)
+			$(_CubeWhereCondition)
+			;
+			
+		ELSEIF '$(vSys.Type)'='Dim' THEN	
+			$(vSys.CubeName):
+			LOAD *
+			FROM $(vSys.QvdPath)$(vSys.QvdName) (qvd)
+			WHERE EXISTS($(vSys.DimID));
+			
+		END IF;
+		
+	NEXT vSys.NumberOftables;
+	
+	//Drop used table
+	DROP TABLE SYS_tables_NAME_AND_LAYER;
+	//Drop used variables
+	LET vSys.NumberOftables =  null();
+	LET vSys.CubeName = null();
+	LET vSys.CubeLayer = null();
+	LET vSys.QvdName = null();
+	LET vSys.QvdPath = null();
+	LET _CubeArea = null();
+	LET _CubeWhereCondition = null();
+	LET _InQlikMartField = null();
+	LET vSys.SourceId = null();
+	LET vSys.Type =  null();
+	LET vSys.DimID = null();
+	LET vSys.Folder = null();
+
+end sub;

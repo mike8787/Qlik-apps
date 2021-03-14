@@ -1,0 +1,122 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////// FACTS AND DATA MODEL TRANSFORMATIONS//////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Loading stock data QVD and creating an Activity Flag for each Stock ID and Date.
+F_STOCK_ACTIVITY:
+LOAD
+    [Stock ID],
+    Date(Date,'YYYYMMDD') as Date,
+    Left(Date(Date,'YYYYMMDD'),6) as YearMonthAux,
+    [Open Day Price],
+    [Min Day Price],
+    [Max Day Price],
+    [Close Day Price],
+    //([Close Day Price]/[Open Day Price])-1 as [Daily Variation],
+    if(len([Open Day Price]) or len([Close Day Price]),1,0) as [Flag Activity],
+    [Adjusted Close Price],
+    [Transactions Day Volume]
+FROM [$(vRootAppQVDsL2)\L2_STOCK_DATA.qvd](qvd);
+
+
+//Creating Key to have the data related at StockID and Date level.
+F_STOCK_DAILY_VARIATION_AUX:
+LOAD
+    [Stock ID],
+    Date as DateAux,
+    AutoNumber([Stock ID]&'#'&Date,'Key Stock Date') as [Key Stock Date],
+    [Close Day Price]
+RESIDENT F_STOCK_ACTIVITY
+WHERE [Flag Activity]=1;
+
+
+//Creating an ascending order with the dates only with activity days, from the first to the last non festive days of each Stock ID.
+LEFT JOIN(F_STOCK_DAILY_VARIATION_AUX)
+LOAD Distinct
+    [Key Stock Date],
+    RowNo() as [Date Order]
+RESIDENT F_STOCK_DAILY_VARIATION_AUX
+ORDER BY [Stock ID],DateAux asc;
+
+
+//Using de previous date to do a left join and then use both close price values to calculate daily variation.
+LEFT JOIN(F_STOCK_DAILY_VARIATION_AUX)
+LOAD
+    [Stock ID],  
+    [Date Order]+1 as [Date Order],
+    [Close Day Price] as [Close Price Previous Day]
+RESIDENT F_STOCK_DAILY_VARIATION_AUX;
+
+
+//Calculating the Daily variation in each row (for each Stock ID and Date).
+LEFT JOIN(F_STOCK_ACTIVITY)
+LOAD
+    [Stock ID],
+    DateAux as Date,
+    [Key Stock Date],
+    [Date Order],
+    [Close Price Previous Day],
+    Num(Round([Close Day Price]/[Close Price Previous Day],0.0001)-1,'#.####') as [Daily Variation]
+RESIDENT F_STOCK_DAILY_VARIATION_AUX;
+
+DROP TABLE F_STOCK_DAILY_VARIATION_AUX;
+
+//STORE F_STOCK_ACTIVITY into '[LIB://stockConnector/Application/QVDS/Layer.2/DAILY.TEST.qvd]';
+
+
+//Min and max dates of activity per month (Flag for max and min non festive days per month and Stock ID)
+F_STOCK_ACTIVITY_MAX_MIN_DATE:
+LOAD Distinct
+    [Stock ID],
+    YearMonthAux,
+    Date(max(Date),'YYYYMMDD') as [Max Date Activity],
+    Date(min(Date),'YYYYMMDD') as [Min Date Activity]
+RESIDENT F_STOCK_ACTIVITY
+WHERE [Flag Activity]=1
+GROUP BY [Stock ID], YearMonthAux;
+
+
+//Creating and integrating the max flag and month date.
+LEFT JOIN(F_STOCK_ACTIVITY)
+LOAD
+    [Stock ID],
+    YearMonthAux,
+    [Max Date Activity] as Date,
+    [Max Date Activity],
+    1 as [Flag Max Month Date Activity]
+RESIDENT F_STOCK_ACTIVITY_MAX_MIN_DATE;
+
+
+//Creating and integrating the min flag and month date.
+LEFT JOIN(F_STOCK_ACTIVITY)
+LOAD
+    [Stock ID],
+    YearMonthAux,
+    [Min Date Activity] as Date,
+    [Min Date Activity],
+    1 as [Flag Min Month Date Activity]
+RESIDENT F_STOCK_ACTIVITY_MAX_MIN_DATE;
+
+DROP TABLE F_STOCK_ACTIVITY_MAX_MIN_DATE;
+DROP Field YearMonthAux;
+
+
+F_STOCK_ACTIVITY_AUX:
+NoConcatenate
+LOAD
+    *,
+    Autonumber([Stock ID]&'#'&Date) as [Key Dividend]
+RESIDENT F_STOCK_ACTIVITY
+WHERE len(Date) and [Flag Activity]=1;
+
+DROP TABLE F_STOCK_ACTIVITY;
+RENAME TABLE F_STOCK_ACTIVITY_AUX TO F_STOCK_ACTIVITY;
+
+
+/*
+F_AUX_DAILY_VARIATION:
+LOAD
+    [Stock ID],
+    Date,
+RESIDENT F_STOCK_ACTIVITY
+WHERE [Max Date Activity]=Date;*/

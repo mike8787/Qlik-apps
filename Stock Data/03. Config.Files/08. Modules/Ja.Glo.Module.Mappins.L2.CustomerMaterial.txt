@@ -1,0 +1,136 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//CUSTOM SCRIPT MODULE
+//FUNCTION: MAPPINGS LAYER 2 - CUSTOMER and MATERIAL
+//----------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////$$$$$$$$$$$$$$$$$$$$$$$$$$$$$  INVENTORY MAPPPINGS $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$/////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping load to get therapeutic area of a brand
+//This is a flat file but will be included in the M.Material master qvd since its a single ad hoc grouping by inventory
+
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='TAH_BRAND';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+//2.)Load mapping info
+MAPP_THERAP_AREA:
+MAPPING LOAD upper(replace([Th.International brand],' ','')) as MAPP_ID1,
+	 		 [Th.Therapeutic area]    as MAPP_IND1
+
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping load to get platform of a brand
+//This is a flat file but will be included in the M.Material master qvd since its a single ad hoc grouping by inventory
+
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='PLATFORM';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+//2.)Load mapping info
+MAPP_PLATFORM:
+MAPPING LOAD  upper(replace([Pl.E2E International Brand],' ','')) as MAPP_ID2,
+	 		 [Pl.Platform]    as MAPP_IND2
+
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////$$$$$$$$$$$$$$$$$$$$$$$$$$$$$  DEMAND MAPPPINGS $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$///////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping load to get classification of a brand
+//This is a flat file but will be included in the M.Material master qvd since its a single ad hoc grouping by demand
+
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name,
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameDEM)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='STRATEGIC';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+//2.)Load mapping info
+MAPP_CLASSIFICATION:
+MAPPING LOAD  upper(replace([st.Brand],' ','')) as MAPP_ID3,
+	 		 [st.Classification]    as MAPP_IND3
+
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the Material division descriptive
+MAPP_DIVISION_DESC:
+MAPPING LOAD text(Division)			as MAPP_DEM_ID2,
+			 [Short Description]	as MAPP_DEM_IND2
+
+FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Master.Data)$(vG.Sys.Extract.SAPBW.MatDivQVD).qvd (qvd)
+;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to get the Customer type descriptive
+MAPP_CUST_TYPE_DESC:
+MAPPING LOAD text([Customer Type])		as MAPP_DEM_ID3,
+			 [Medium description]		as MAPP_DEM_IND3
+
+FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.QVD.Master.Data)$(vG.Sys.Extract.SAPBW.CustTypeQVD).qvd (qvd)
+;
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Mapping to identify the Demand Main brands for Herve Report
+//1.) Load qvd relating info
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name,
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameDEM)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the destructions ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='DEMBRAND';
+
+
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+DROP TABLE SYS_METADATA_TABLES;
+//2.)Load mapping info
+MAPP_DEM_BRAND:
+MAPPING LOAD  upper(replace([Demand Brand],' ','')) as MAPP_DEM_ID4,
+			[Demand Brand]	    as MAPP_DEM_IND4
+
+FROM [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd] (qvd);
+

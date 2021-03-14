@@ -1,0 +1,61 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////// FACTS OTD //////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// On time delivery is a SharePoint metric but has to be treated separately beacuase its targets come from the thresholds flat file
+
+///////////////////////////////////////////////////////////////////////////////////////
+// 1. Load OTD facts from L1 SharePoint QVD
+F_OTD_AUX:
+LOAD 
+     Date(Date#(Left(MeasurementDate,10),'YYYY-MM-DD'),'YYYYMMDD') as Date,
+     Year(Date#(Left(MeasurementDate,10),'YYYY-MM-DD')) as Year,
+     StageGateId,
+     ProductId,
+     Value as Actual,
+     MeasurementComments as Comment
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)F_OnTimeDelivery.qvd](qvd);
+
+LEFT JOIN (F_OTD_AUX)
+LOAD Distinct
+	ProductId,
+	Upper(ProductName) as Brand
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_PRODUCT.qvd](qvd);
+
+// add target and tolerance from flat files
+LEFT JOIN (F_OTD_AUX)
+LOAD 
+     YEAR as Year, 
+     TARGET as Target, 
+     TOLERANCE as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=16;
+
+///////////////////////////////////////////////////////////////////////////////////////
+// 2. evaluate status
+
+F_OTD:
+NoConcatenate
+LOAD Date,
+	 StageGateId,
+	 Brand,
+	 Only(Target) as Target,
+	 Only(Tolerance) as Tolerance,
+	 Num#(Only(Actual), '#,###.0') as Actual,
+	 Only(Comment) as Comment,
+	 $(v.StatusEvaluation(5, Only(Actual), Only(Target), Only(Tolerance))) as Status,
+	 16 as [KPI ID]
+Resident F_OTD_AUX
+Group by Date, StageGateId, Brand;
+
+Drop Table F_OTD_AUX;
+
+Concatenate(JSC_FACTS)
+LOAD *,
+0 as [Commercial Brand],
+1 as [Development Brand]
+Resident F_OTD;
+//STORE F_OTD into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_OTD.qvd];
+DROP Table F_OTD;

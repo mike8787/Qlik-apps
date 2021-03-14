@@ -1,0 +1,32 @@
+F_STOCK_AUX:
+LOAD Distinct
+	*,
+      Date#(DateAux,'YYYY/MM/DD') as Date
+RESIDENT F_STOCK;
+
+DROP TABLE F_STOCK;
+DROP FIELD DateAux;
+RENAME TABLE F_STOCK_AUX TO F_STOCK;
+
+
+//Calculating the the deviaton of a stock value [(Close - Close (Previous Date))-1]
+M_DEVIATION:
+LOAD
+	[Stock Name],
+	Date,
+	Close,
+	Close/Previous(Close)-1 as [Daily Deviation]
+RESIDENT F_STOCK
+ORDER BY [Stock Name], Date asc;
+//GROUP BY [Stock Name], Date
+
+
+LEFT JOIN(F_STOCK)
+LOAD
+	Date,
+	[Stock Name],
+	[Daily Deviation]
+RESIDENT M_DEVIATION;
+
+
+DROP TABLE M_DEVIATION;

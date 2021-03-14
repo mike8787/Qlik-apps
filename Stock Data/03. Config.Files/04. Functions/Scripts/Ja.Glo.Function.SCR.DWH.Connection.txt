@@ -1,0 +1,32 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION SYS SCR CONNECTION
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sys_bbdd_connection(_docName,_sheetName,_environment)
+//This function loads variables located in _docName in _sheetName
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+// the following structure: Fields: Source, Connection_String, Environment, User
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_sys_SCR_DWH_connection(_docName,_sheetName,_environment)
+	
+	SYS_SCR_CONNECTION:
+	LOAD Connection_String, 
+		 Environment
+		 
+	FROM [$(_docName)]
+	(ooxml, embedded labels, table is $(_sheetName))
+	Where Environment = '$(_environment)'
+	;
+	// La variable toma el valor del string de conexion
+	LET vG.Sys.Extract.SCR.ConnectionString = replace(peek('Connection_String',0,'SYS_SCR_CONNECTION'),'|','"');
+
+	// Evaluando la variable se copia en el script el string de conexion para su ejecucion
+	$(vG.Sys.Extract.SCR.ConnectionString);
+
+	// Eliminamos tabla auxiliar y reseteamos variable
+	DROP Table SYS_SCR_CONNECTION;
+	LET vG.Sys.Extract.SCR.ConnectionString = Null();
+
+End Sub;

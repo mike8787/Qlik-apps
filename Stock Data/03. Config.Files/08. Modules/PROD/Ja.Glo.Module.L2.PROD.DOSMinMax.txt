@@ -1,0 +1,257 @@
+//////////////////////////////////////LOADING DOS Min/Max Metrics from Inventory QVDs////////////////////////////////////
+DOS_MINMAX_AUX:
+Load*Inline 
+[
+DummyDOS
+];
+
+
+Concatenate (DOS_MINMAX_AUX)
+Load
+	SID_0MATERIAL,
+	Date,
+	[DoSinv.Current DOS], 
+	[DoSinv.Target DOS], 
+	DoSinv.Min, 
+	DoSinv.Max, 
+	DoSinv.Target_Low,
+	DoSinv.Target_Ext_Max,
+	DoSinv.Target_Ext_Min,
+	DoSinv.Target_High,
+	[DoSinv.Target_Counter]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)FF_F_DOSINV_L2_*.qvd] (qvd);
+
+Drop Field DummyDOS;
+
+
+LEFT JOIN(DOS_MINMAX_AUX)
+LOAD Distinct
+	SID_0MATERIAL,
+	[m.Financial Brand] as Brand
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)F_M_MATERIAL_L2.qvd](qvd)
+Where not IsNull([m.Financial Brand]) or not len([m.Financial Brand])=0;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+//BRAND_QUALITY_CHECK:
+LOAD Distinct 
+	 SID_0MATERIAL as B.SID_Key,
+
+	 Brand as [B.Original_Brand],
+
+	 'Inventory and Destructions Dashboard' as B.Metric_Origin,
+
+	 'DOS MIN/MAX' as B.Metric,
+	 
+	 ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Brand])),Upper(Trim([Brand]))) as [B.Product_Brand],
+
+	 ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand])), '') as [B.E2E_International_Brand],
+
+	 ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Brand])),
+	  		ApplyMap('MAP_BRAND_E2E', Upper(Trim([Brand])), ''))  as [B.E2E_International_Brand_Brand_Aligmnet]
+
+Resident DOS_MINMAX_AUX
+Where not len(Date)*len([Brand])=0;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+DOS_MINMAX:
+NoConcatenate
+LOAD 
+	SID_0MATERIAL,
+	Date,
+	[DoSinv.Current DOS], 
+	[DoSinv.Target DOS], 
+	DoSinv.Min, 
+	DoSinv.Max, 
+	DoSinv.Target_Low,
+	DoSinv.Target_Ext_Max,
+	DoSinv.Target_Ext_Min,
+	DoSinv.Target_High,
+	[DoSinv.Target_Counter],
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([Brand])),Upper(Trim([Brand]))) as Brand
+Resident DOS_MINMAX_AUX;
+
+Drop Table DOS_MINMAX_AUX;
+
+
+LEFT JOIN(DOS_MINMAX)
+LOAD
+	SID_0MATERIAL,
+	Date,
+	sum(DoSinv.Target_Low + DoSinv.Target_Ext_Min) as SKU_DOSMin_Aux,
+	sum(DoSinv.Target_High + DoSinv.Target_Ext_Max) as SKU_DOSMax_Aux
+RESIDENT DOS_MINMAX
+GROUP BY SID_0MATERIAL, Date;
+
+
+LEFT JOIN(DOS_MINMAX)
+LOAD
+	Brand,
+	Date,
+	count(SKU_DOSMin_Aux) as SKU_DOSMin
+RESIDENT DOS_MINMAX
+WHERE SKU_DOSMin_Aux>0
+GROUP BY Brand, Date;
+
+
+LEFT JOIN(DOS_MINMAX)
+LOAD
+	Brand,
+	Date,
+	count(SKU_DOSMax_Aux) as SKU_DOSMax
+RESIDENT DOS_MINMAX
+WHERE SKU_DOSMax_Aux>0
+GROUP BY Brand, Date;
+
+
+LEFT JOIN(DOS_MINMAX)
+LOAD
+	Brand,
+	Date,
+	sum(DoSinv.Target_Counter) as Total_DOS
+RESIDENT DOS_MINMAX
+GROUP BY Brand, Date;
+
+
+DOS_MINMAX_AUX:
+LOAD
+	*,
+	if(isnull(SKU_DOSMin), '0.00', SKU_DOSMin/Total_DOS) as [DOS Min],
+	if(isnull(SKU_DOSMax),'0.00', SKU_DOSMax/Total_DOS) as [DOS Max]
+RESIDENT DOS_MINMAX;
+
+
+////////Master table for aggregation in SS (SKU Level counters) to link DOS Min/Max calculations with facts.
+M_DOS_MINMAX_SKU_AUX:
+LOAD
+	Brand,
+	Date,
+	DoSinv.Target_High + DoSinv.Target_Ext_Max as [DOS Max Total],
+	[DoSinv.Target_Counter] as [DOS Total],
+	57 as [KPI ID]
+RESIDENT DOS_MINMAX;
+
+
+CONCATENATE(M_DOS_MINMAX_SKU_AUX)
+LOAD
+	Brand,
+	Date,
+	DoSinv.Target_Low + DoSinv.Target_Ext_Min as [DOS Min Total],
+	[DoSinv.Target_Counter] as [DOS Total],
+	58 as [KPI ID]
+RESIDENT DOS_MINMAX;
+
+DROP TABLE DOS_MINMAX;
+
+
+M_DOS_MINMAX_SKU:
+LOAD
+	Brand&'#'&Date&'#'&[KPI ID] as [Key DOS MINMAX SKU],
+	[DOS Max Total],
+	[DOS Min Total],
+	[DOS Total]
+RESIDENT M_DOS_MINMAX_SKU_AUX;
+
+DROP TABLE M_DOS_MINMAX_SKU_AUX;
+
+
+//Separating each metric in different tables in order to include the corresponding Target and Tolerance from KPI_Thresholds file, and link to the model 
+//by corresponding KPI ID field as well
+
+DOS_MIN_AUX:
+LOAD
+	Brand,
+	Date,
+	Left(Date#(Date),4) as Year,
+	Num#(Num([DOS Min])) as Actual,
+	58 as [KPI ID]
+RESIDENT DOS_MINMAX_AUX;
+
+
+LEFT Join(DOS_MIN_AUX)
+LOAD 
+	[KPI ID],
+    YEAR as Year, 
+    Num#(Num(TARGET,'#,##0%'),'#,##0%') as Target,
+    Num#(Num(TOLERANCE,'#,##0%'),'#,##0%') as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=58; // 58 is the KPI ID assigned for DOS MIN (Commercial Brands only) in Layer 1 Extractor (Hard Coded)
+
+
+DOS_MAX_AUX:
+LOAD
+	Brand,
+	Date,
+	Left(Date#(Date),4) as Year,
+	Num#(Num([DOS Max])) as Actual,
+	57 as [KPI ID]
+RESIDENT DOS_MINMAX_AUX;
+
+
+LEFT Join(DOS_MAX_AUX)
+LOAD 
+	[KPI ID],
+    YEAR as Year, 
+    Num#(Num(TARGET,'#,##0%'),'#,##0%') as Target,
+    Num#(Num(TOLERANCE,'#,##0%'),'#,##0%') as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=57; // 57 is the KPI ID assigned for DOS MAX (Commercial Brands only) in Layer 1 Extractor (Hard Coded)
+
+DROP TABLE DOS_MINMAX_AUX;
+
+
+//Evaluating the Status (color) of each metric regarding the Targets and Tolerances integrated before.
+DOS_MIN:
+LOAD Distinct
+	Brand,
+	Date,
+	Brand&'#'&Date&'#'&[KPI ID] as [Key DOS MINMAX SKU],
+	Target,
+	Tolerance,
+	if(len(Actual),if(Actual>Target,4,2),1) as Status,
+	Actual,
+	[KPI ID]
+RESIDENT DOS_MIN_AUX;
+
+
+DOS_MAX:
+NoConcatenate
+LOAD Distinct
+	Brand,
+	Date,
+	Brand&'#'&Date&'#'&[KPI ID] as [Key DOS MINMAX SKU],
+	Target,
+	Tolerance,
+	if(len(Actual),if(Actual>Target,4,2),1) as Status,
+	Actual,
+	[KPI ID]
+RESIDENT DOS_MAX_AUX;
+
+DROP TABLE DOS_MIN_AUX;
+DROP TABLE DOS_MAX_AUX;
+
+
+//Concatenate DOS MIN Metric with facts
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident DOS_MIN;
+DROP Table DOS_MIN;
+
+
+//Concatenate DOS MAX Metric with facts
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident DOS_MAX;
+DROP Table DOS_MAX;

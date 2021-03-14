@@ -1,0 +1,49 @@
+////////////////////////////////////////////////////////////////////////////
+//Module L2 Master excel
+////////////////////////////////////////////////////////////////////////////
+//Load meta tables info just for Static Demand FF
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.Name)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the Static Demand ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='STADEMAST';
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+LET vG.Sys.Extract.FlatFiles.L2StorePath = replace('$(vG.Sys.Extract.FlatFiles.L1StorePath)','$(vG.Sys.Path.QVD.Layer1)','$(vG.Sys.Path.QVD.Layer2)');	//Store path of the new L2 Qvd
+
+DROP TABLE SYS_METADATA_TABLES;
+
+FF_STA_DEMAND_MASTER_L2:
+//Load and mapping master table
+LOAD *,
+	//Customer ABC classification (customer-material)
+	ApplyMap('MAPP_FF_MAX_CLASS',text(SID_Key),'NonStrategic') as [Customer ABC indicator]
+	;
+LOAD
+	*,
+	ApplyMap('MAPP_KEY_MASTER',SubField(m.Key,'-',1)&'|'&SubField(m.Key,'-',SubStringCount(m.Key,'-')+1),'NA') as SID_Key,
+	//Brand level classification
+	ApplyMap('MAPP_FF_F_STRATEGIC',upper(replace(text([m.Material Description]),' ','')),'NonStrategic') as [m.Classification],
+	ApplyMap('MAPP_THERAP_AREA',upper(replace(text([m.Material Description]),' ','')),'NA') as [m.Therapeutic area],
+	ApplyMap('MAPP_PLATFORM',upper(replace(text([m.Material Description]),' ','')),'NA') as [m.Platform],
+	ApplyMap('MAPP_COUNTRY_KEY',upper(replace(text([m.Country]),' ','')),'NA') as [m.Country Key]
+	
+		
+from [$(vG.Sys.Extract.FlatFiles.L1StorePath)$(vG.Sys.Extract.FlatFiles.TableName).qvd]
+(qvd);
+
+DROP FIELD m.Key;
+
+//Store Qvd
+STORE FF_STA_DEMAND_MASTER_L2 into [$(vG.Sys.Extract.FlatFiles.L2StorePath)$(vG.Sys.Extract.FlatFiles.TableName)_L2.qvd] (qvd);
+//Drop used table and variable
+DROP TABLE FF_STA_DEMAND_MASTER_L2;
+
+LET vG.Sys.Extract.FlatFiles.TableName = null();
+LET vG.Sys.Extract.FlatFiles.L1StorePath = null();
+LET vG.Sys.Extract.FlatFiles.L2StorePath = null();

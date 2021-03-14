@@ -1,0 +1,41 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION SYS SAP CONNECTION
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sys_sapbw_connection(_docName,_sheetName,_environment)
+//This function loads variables located in _docName in _sheetName
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+// the following structure: Fields: Source, Connection_String, Environment, User
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_sys_sapbw_connection(_docName,_sheetName,_environment)
+SYS_SAPBW_CONNECTION:
+LOAD Source, 
+     Connection_String, 
+     Environment, 
+     User
+FROM [$(_docName)]
+(ooxml, embedded labels, table is $(_sheetName))
+Where Environment = '$(_environment)' AND Active = 'Yes';
+
+LET vG.Sys.Extract.SAPBW.ConnectionString = FieldValue('Connection_String',1);
+
+DROP Table SYS_SAPBW_CONNECTION;
+
+$(vG.Sys.Extract.SAPBW.ConnectionString)
+
+SYS_MAP_INFO_OBJTEXTS:
+Mapping 
+LOAD [IOBJNM],
+   [TXTLG];
+SQL Select LANGU TXTLG IOBJNM  from RSDIOBJT
+where LANGU = 'E';
+
+SYS_MAP_INFO_OBJECTS:
+Mapping
+LOAD [FIELDNM] as [InfoFieldName],
+	 Applymap('SYS_MAP_INFO_OBJTEXTS',IOBJNM) as [InfoObject Description]; 
+SQL Select * from RSDIOBJ;
+
+End Sub;

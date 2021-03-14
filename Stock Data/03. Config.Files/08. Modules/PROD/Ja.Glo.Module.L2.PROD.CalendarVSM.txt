@@ -1,0 +1,47 @@
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////// (M) Calendar ///////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Purpose:	VSM Calendar Master Data
+
+//Generate the calendar
+M_CALENDAR_VSM:
+LOAD Distinct 
+	Left(Year,4) as VSM.Year,
+	Upper(Year) as VSM.Year.Label
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.Financial.Data)FF_FINANCIAL_DATA.qvd](qvd)
+Where [Year] <> 'Grand Total';
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////// (M) Growth Calendar ////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Purpose:	Growth Calendar Master Data
+
+//Generate the secondary calendar to show growths and evolutions
+M_GROWTH_CALENDAR_AUXILIAR:
+LOAD Distinct 
+	VSM.Year, 
+	VSM.Year.Label, 1 as [Date Counter Aux]
+Resident M_CALENDAR_VSM;
+
+//
+Outer Join (M_GROWTH_CALENDAR_AUXILIAR)
+LOAD 1 as [Date Counter Aux],
+	 VSM.Year as VSM.Year.Growth, 
+	 VSM.Year.Label as VSM.Year.Label.Growth
+Resident M_GROWTH_CALENDAR_AUXILIAR;
+
+//
+M_VSM_GROWTH_CALENDAR:
+LOAD
+ 	VSM.Year,
+	VSM.Year.Label.Growth as VSM.Year.Label,
+ 	VSM.Year.Growth - VSM.Year as [VSM.Growth Calendar Difference]
+Resident M_GROWTH_CALENDAR_AUXILIAR
+Where [VSM.Year.Growth] >= [VSM.Year];
+
+//
+DROP Table M_GROWTH_CALENDAR_AUXILIAR;
+DROP Table M_CALENDAR_VSM;

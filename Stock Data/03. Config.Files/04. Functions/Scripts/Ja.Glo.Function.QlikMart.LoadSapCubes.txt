@@ -1,0 +1,84 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD fact tables from business area
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sap_cubes(_CubeArea,_CubeWhereCondition,_InQlikMartField)
+//This function loads al the facts QVDs from the indicated business Area
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_cubeArea: Analitical area (currently Demand or Inventory)
+//_CubeWhereCondition: specific where condition for the cube (date range, fields values, etc...)
+//_InQlikMartField: name of the inQlikMart column to be used from the metadata excel
+////////////////////////////////////////////////////////////////////////////////////////////////
+	
+sub _load_sap_cubes(_CubeArea,_CubeWhereCondition,_InQlikMartField)
+
+	//Read QVD info
+	SYS_CUBES_NAME_AND_LAYER:
+	LOAD Object_Name,
+		 Extractor_Type,
+	     Last_stored_Layer,
+		 Source_Id
+	FROM
+	[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SAP.Name)]
+	(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Cubes))
+	//Just stored cubes from _CubeArea
+	WHERE $(_InQlikMartField)='Yes' and not isnull(Last_stored_Layer) and Extractor_Type='$(_CubeArea)';
+	
+	//Count the number of cubes to load
+	LET vSys.Total.FilesToLoad = FieldValueCount('Object_Name');
+	TRACE 'Files to load: ' vSys.Total.FilesToLoad;
+	//Load * of each cube
+	FOR vSys.NumberOfCubes=0 to ($(vSys.Total.FilesToLoad)-1)
+	
+		//Read the details of the QVD to Load
+		LET vSys.CubeName = Peek('Object_Name', vSys.NumberOfCubes, 'SYS_CUBES_NAME_AND_LAYER'); 			//Cube QVD name
+		LET vSys.CubeLayer = Peek('Last_stored_Layer', vSys.NumberOfCubes, 'SYS_CUBES_NAME_AND_LAYER'); 	//Stored Layer
+		LET vSys.SourceId = Peek('Source_Id', vSys.NumberOfCubes, 'SYS_CUBES_NAME_AND_LAYER'); 				//Stored Layer
+		
+		//If is a cube from E2E, we will use the week detail cubes, to do so, we have to add the suffix _E2E
+		if '$(_InQlikMartField)'='In_E2E_QLikMart' then
+			LET vSys.CubeName = '$(vSys.CubeName)_E2E';
+		END IF;
+		
+		//Depending on Layer (1 or 2), set path variable and qvd name
+		IF '$(vSys.CubeLayer)'='L2' then
+			LET vSys.QvdName = '$(vSys.CubeName)_L2.qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(_CubeArea)\';
+		
+		ELSEIF '$(vSys.CubeLayer)'='L1' then
+			LET vSys.QvdName = '$(vSys.CubeName).qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(_CubeArea)\';
+
+		ELSEIF '$(vSys.CubeLayer)'='L3' then
+			LET vSys.QvdName = '$(vSys.CubeName)_L3.qvd';
+			LET vSys.QvdPath = '$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(_CubeArea)\';
+		
+		END IF;
+		
+		//Load * sentence of that cube
+		CONCATENATE (FACTS_JSC)
+		LOAD *,$(vSys.SourceId) as SOURCE_ID
+		FROM $(vSys.QvdPath)$(vSys.QvdName) (qvd)
+		//Cube manual condition (where clausules for dates of specific fields)
+		$(_CubeWhereCondition)
+		;
+	
+	NEXT vSys.NumberOfCubes;
+	
+	//Drop used table
+	DROP TABLE SYS_CUBES_NAME_AND_LAYER;
+	//Drop used variables
+	LET vSys.NumberOfCubes =  null();
+	LET vSys.CubeName = null();
+	LET vSys.CubeLayer = null();
+	LET vSys.QvdName = null();
+	LET vSys.QvdPath = null();
+	LET _CubeArea = null();
+	LET _CubeWhereCondition = null();
+	LET _InQlikMartField = null();
+	LET vSys.SourceId = null();
+
+end sub;

@@ -1,0 +1,110 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////LOADING MASTER DATA ///////////////////////////////////////
+// 	1. StageGate Master
+//	2. Product Master
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. StageGate Master
+
+M_STAGEGATE:
+LOAD StageGateId,
+     StageGate
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_STAGEGATES.qvd] (qvd)
+Where StageGateId <> 21; // StageGateID 21 is for Launch
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 2. Product Master
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Adding Therapeutic Area from SharePoint
+// Adding Platform and Therapeutic Adrea from Master Material that is extracted from SAP
+// Adding Discontinued Brands
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+M_Product_Master:
+Load Distinct 
+	Upper(Trim(Brand)) as Brand,
+	[Commercial Brand],
+	[Development Brand],
+	ApplyMap('MAP_THERAPEUTICAREAID_BRAND', Upper(Trim(Brand)),null()) as TherapeuticAreaId
+Resident JSC_FACTS_FINAL;
+
+
+//Including Therapeutic area from SP and SAP(E2E)
+M_Product_Master_Aux:
+Load Distinct
+	TherapeuticAreaId, 
+	Brand,
+	Max([Commercial Brand]) as [%HIDE_COMMERCIAL_BRAND],
+	Max([Development Brand]) as [%HIDE_DEVELOPMENT_BRAND],
+	UPPER(Applymap('MAP_E2E_THERAPEUTIC_AREA',Upper(Trim(Brand)),Applymap('MAP_THERAPEUTICID_AREA_SP',TherapeuticAreaId,null()))) As [Therapeutic Area],
+	ApplyMap('MAP_E2E_PLATFORM', Upper(Trim(Brand)), Null()) as Platform
+Resident M_Product_Master
+Group By Brand, TherapeuticAreaId;
+
+
+Drop fields [Commercial Brand], [Development Brand];
+Drop Table M_Product_Master;
+Rename Table M_Product_Master_Aux to M_Product_Master;
+
+
+// Adding discontinued brands
+// Commercial Discontinued brands
+Left Join (M_Product_Master)
+Load Distinct [Discontinued Brands] as Brand,
+	 1 as [%HIDE_COMMERCIAL_DISCONTINUED_BRAND_FLAG]
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.Discontinued.Brands)FF_COMMERCIAL_DISCONTINUED_BRANDS.qvd]
+(qvd)
+Where not Len([Discontinued Brands]) = 0;
+
+// Development Discontinued brands
+Left Join (M_Product_Master)
+Load Distinct [Discontinued Brands] as Brand,
+	 1 as  [%HIDE_DEVELOPMENT_DISCONTINUED_BRAND_FLAG]
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.Discontinued.Brands)FF_DEVELOPMENT_DISCONTINUED_BRANDS.qvd]
+(qvd)
+Where not Len([Discontinued Brands]) = 0;
+
+
+M_Product_Master_Final:
+Load *,
+	'SID_Brand|'&Upper(Trim(Replace(Brand,' ',''))) as SID_Brand
+Resident M_Product_Master
+Where Not Len(Brand) = 0;
+
+Drop Table M_Product_Master;
+
+Concatenate (M_Product_Master_Final)
+Load
+	SID_Brand,
+	Brand,
+	[VSM.Brand Family],
+	VSM.Region,
+	[VSM.Galenic Form],
+	[VSM.RF-/R-/JnJ-Number],
+	'1' as [%HIDE_COMMERCIAL_BRAND],
+	'0' as [%HIDE_DEVELOPMENT_BRAND]
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)M_FF_FINANCIAL_DATA_L2.qvd](qvd)
+Where Not Len (Brand) = 0;
+
+Concatenate (M_Product_Master_Final)
+Load
+	 'SID_INSTANTIS|'&[VSM.Instantis.Project ID]&Brand as SID_Brand,
+	Brand,
+	[VSM.Instantis.Project ID], 
+    [VSM.Instantis.Project Name], 
+    [VSM.Instantis.Country - Site], 
+    [VSM.Instantis.Project Phase], 
+    [VSM.Instantis.LE Close Date], 
+    [VSM.Instantis.Strategic Initiative], 
+    [VSM.Instantis.Overall Status],
+    '1' as [%HIDE_COMMERCIAL_BRAND],
+	'0' as [%HIDE_DEVELOPMENT_BRAND]
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)FF_INSTANTIS_PROJECT_UPDATES_L2.qvd](qvd);
+

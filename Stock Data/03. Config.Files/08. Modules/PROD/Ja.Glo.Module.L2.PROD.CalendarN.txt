@@ -1,0 +1,144 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//---------------------------------------------------------------------------------------------------------------------------------------------
+// CUSTOM SCRIPT MODULE: Creation of a Calendar, different from the one in the function since it allow to assign variations YTD to the same Date
+//---------------------------------------------------------------------------------------------------------------------------------------------
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//0.) Set date range
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//LET v.Sys.DateMin.Calendar = NUM(addyears(Today(),-1)); //set in QM
+//LET v.Sys.DateMax.Calendar = NUM(addyears(Today(),3)); //set in QM
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//1.) Mapping table to get the Quarter of each month
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+QuartersMap:  
+MAPPING LOAD   
+		rowno() as Month,  
+		Ceil (rowno()/3) as Quarter  
+AUTOGENERATE (12);
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//2.) Base table to get the relation betwen one month and the relatives for YTD
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+LET v.Sys.Loop.MonthA = 1;
+LET v.Sys.Loop.MonthB = 1;
+
+//Start automatic loop
+for v.Sys.Loop.MonthA=1 to 12 step 1
+	for v.Sys.Loop.MonthB=$(v.Sys.Loop.MonthA) to 1 step -1
+	
+		BASE_YTD_TABLE:
+		LOAD * INLINE [
+			MonthA, MonthB
+		    $(v.Sys.Loop.MonthA), $(v.Sys.Loop.MonthB)
+		];
+		
+	next;
+next ;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//3.) Base table for master calendar table 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TempCalendar:  
+LOAD  
+	$(v.Sys.DateMin.Calendar) + Iterno()-1 							as Num,  
+	Date($(v.Sys.DateMin.Calendar) + IterNo() - 1)					as TempDate
+	
+AutoGenerate 1 While $(v.Sys.DateMin.Calendar) + IterNo() -1 <= $(v.Sys.DateMax.Calendar);  
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//4.) M_CALENDAR table for YTD month relations
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Load Base table and create calendar fields
+M_CALENDAR_BASE_YTD:  
+LOAD DISTINCT  
+	TempDate														As TempDateBase,
+	NUM(Year(TempDate)&Num(month(TempDate),'00')&'01') 				As C.Date, //Display date
+	99																As PerType, //99 is the YTD relation
+	Year(TempDate) 													As Year,
+	Month(TempDate) 												As Month, 
+	NUM(Month(TempDate),'00')										As MonthNum,
+	Dual(Month(TempDate)&chr(39)&Right(Year(TempDate),2),NUM(Year(TempDate)&Num(month(TempDate),'00'))) As YearMonth,
+	NUM(Year(TempDate)&Num(month(TempDate),'00')) 					As YearMonthNum,
+	Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null())&chr(39)&Right(Year(TempDate),2),Year(TempDate)&ApplyMap('QuartersMap', month(TempDate), Null())) As YearQuarter,
+	Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null()),ApplyMap('QuartersMap',month(TempDate),Null())) As Quarter
+
+Resident TempCalendar
+Order By TempDate ASC;
+
+//Multiply each record as many times as corresponds to its YTD
+LEFT JOIN (M_CALENDAR_BASE_YTD) LOAD MonthA as MonthNum,
+							 MonthB as MonthYTDGap
+RESIDENT BASE_YTD_TABLE;
+
+//Drop base used table
+DROP TABLE BASE_YTD_TABLE;
+
+//Generate final YTD table with the Date YYYYMMDD format using the months offssets added in the left join
+M_CALENDAR:
+LOAD *,
+	NUM(Year(addmonths(TempDateBase,(-1*MonthYTDGap)+1))&Num(month(addmonths(TempDateBase,(-1*MonthYTDGap)+1)),'00')&'01') 			As Date
+
+RESIDENt M_CALENDAR_BASE_YTD;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//5.) M_CALENDAR table for YTD previous year
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Load all fields instead of using * since we need to modify the Per Type
+CONCATENATE (M_CALENDAR) LOAD   C.Date, 						//Display date
+								100 				as PerType, //100 is the prev YTD relation
+								Year,
+								Month, 
+								MonthNum,
+								YearMonth,
+								YearMonthNum,
+								YearQuarter,
+								Quarter,
+								NUM(Year(addyears(addmonths(TempDateBase,(-1*MonthYTDGap)+1),-1))&Num(month(addyears(addmonths(TempDateBase,(-1*MonthYTDGap)+1),-1)),'00')&'01') 			As Date
+
+RESIDENt M_CALENDAR_BASE_YTD;
+
+//Drop unused fields and tables
+DROP FIELDS TempDateBase,MonthYTDGap;
+DROP TABLE M_CALENDAR_BASE_YTD;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//6.) M_CALENDAR table for normal Date
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+CONCATENATE (M_CALENDAR)
+LOAD DISTINCT 
+	NUM(Year(TempDate)&Num(month(TempDate),'00')&'01')			 	As Date, 
+	NUM(Year(TempDate)&Num(month(TempDate),'00')&'01') 				As C.Date,
+	0																As PerType,	//0 is the same date, no variation
+	Year(TempDate) 													As Year,
+	Month(TempDate) 												As Month, 
+	NUM(Month(TempDate),'00')										As MonthNum,
+	Dual(Month(TempDate)&chr(39)&Right(Year(TempDate),2),NUM(Year(TempDate)&Num(month(TempDate),'00'))) As YearMonth,
+	NUM(Year(TempDate)&Num(month(TempDate),'00')) 					As YearMonthNum,
+	Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null())&chr(39)&Right(Year(TempDate),2),Year(TempDate)&ApplyMap('QuartersMap', month(TempDate), Null())) As YearQuarter,
+	Dual('Q'&ApplyMap('QuartersMap',month(TempDate),Null()),ApplyMap('QuartersMap',month(TempDate),Null())) As Quarter
+
+Resident TempCalendar
+Order By TempDate ASC;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//6.) Drop used tables and variables
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Drop Table TempCalendar;
+//LET v.Sys.DateMin.Calendar = null(); //dropped in QM
+//LET v.Sys.DateMax.Calendar = null(); //dropped in QM

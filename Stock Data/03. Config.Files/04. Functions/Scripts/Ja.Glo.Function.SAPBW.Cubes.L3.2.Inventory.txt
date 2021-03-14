@@ -1,0 +1,163 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION LOAD SAP CUBES Layer 3 (Inventory)
+//----------------------------------------------------------------------------------------------
+//Example: call _load_SAP_Cubes_Inv_L3.1(_vQvdToExtract)
+//This function Generates Layer.3.1 SAP qvds from Inventory based in the ones from Layer 2
+//The Demand info at SKU level for DoS calculation is added here
+//----------------------------------------------------------------------------------------------
+//INPUT FIELDS
+//----------------------------------------------------------------------------------------------
+//_vQvdToExtract : Inventory cube QVD name to extract
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//1.) PRE STAGE Load Flat flile DoS Targets info
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Load meta tables info just for DoSTargets FF
+SYS_METADATA_TABLES:
+LOAD Meta_Table_Name, 
+     Meta_Store_Path
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+//Only the ones that have load flag activated and the conversion ones
+WHERE Load_Indicator='Yes' and Internal_ETL_code='DOSTARG';
+
+//Set data variables (Conversions is set on a monthly basis)
+LET vG.Sys.Extract.FlatFiles.DateToday = Today()-1;
+LET vG.Sys.Extract.FlatFiles.DateEnd = Num(MakeDate(Year($(vG.Sys.Extract.FlatFiles.DateToday)), Num(Month($(vG.Sys.Extract.FlatFiles.DateToday)))));
+LET vG.Sys.Extract.FlatFiles.DateIni = Num(AddMonths(vG.Sys.Extract.FlatFiles.DateEnd,-36));
+
+//Read/set the details of the Table to Load
+LET vG.Sys.Extract.FlatFiles.TableName = Peek('Meta_Table_Name', 0, 'SYS_METADATA_TABLES');					//Base Qvd name from L1
+LET vG.Sys.Extract.FlatFiles.L1StorePath = Peek('Meta_Store_Path', 0, 'SYS_METADATA_TABLES');				//Path where original qvd is stored
+LET vG.Sys.Extract.FlatFiles.L2StorePath = replace('$(vG.Sys.Extract.FlatFiles.L1StorePath)','$(vG.Sys.Path.QVD.Layer1)','$(vG.Sys.Path.QVD.Layer2)');	//Store path of the new L2 Qvd
+TRACE $(vG.Sys.Extract.FlatFiles.L2StorePath);
+
+//Load and concatenate all target qvds
+DO while vG.Sys.Extract.FlatFiles.DateIni <= $(vG.Sys.Extract.FlatFiles.DateEnd)
+
+	LET vG.Sys.Extract.FlatFiles.YearMonthIni = Year($(vG.Sys.Extract.FlatFiles.DateIni))&Num(Month($(vG.Sys.Extract.FlatFiles.DateIni)),'00');
+	LET vG.Sys.Extract.FlatFiles.L1TableNameMonthly = '$(vG.Sys.Extract.FlatFiles.TableName)_$(vG.Sys.Extract.FlatFiles.YearMonthIni)'; 
+	LET vG.Sys.Extract.FlatFiles.L2TableNameMonthly = '$(vG.Sys.Extract.FlatFiles.TableName)_L2_$(vG.Sys.Extract.FlatFiles.YearMonthIni)'; 
+	
+	IF FileSize('$(vG.Sys.Extract.FlatFiles.L2StorePath)$(vG.Sys.Extract.FlatFiles.L2TableNameMonthly).qvd')>0 then
+		FF_TARGETS:
+		LOAD *
+		FROM [$(vG.Sys.Extract.FlatFiles.L2StorePath)$(vG.Sys.Extract.FlatFiles.L2TableNameMonthly).qvd](qvd) 
+		;
+	ENDIF;
+	
+	LET vG.Sys.Extract.FlatFiles.DateIni = Num(AddMonths(vG.Sys.Extract.FlatFiles.DateIni,1));
+	
+LOOP
+
+DROP TABLE SYS_METADATA_TABLES;
+
+
+SUB _load_SAP_Cubes_Inv_L3.2(_vQvdToExtract)
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//2.) Load layer 2 cube and set custom applymap to get the demand
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//Get the 12 future months demand for that material and date
+	$(_vQvdToExtract)_L2.8:
+	LOAD *,
+		 //DoS Formula: ((Inv Quantity by Month * Cost)/(FC Demand 12 future months * Cost) ) * 365 days to have it by day
+		 ([Stock Value @ Inventory (USD)] / ([FC Demand 12m]*[System_Cost]))*365 as 	[DoS Inv], 
+		 ([Global Inventory Qty] / ([FC Demand 12m]))*365 	 	 as 	[DoS Inv Qty]
+	;
+	LOAD *,
+		applymap('MAPP_$(_vQvdToExtract)_L2.7',text(applymap('MAPP_GLOBAL_ID_SID_REL',SID_0MATERIAL,'@')&[Calendar year / week]),0) as [FC Demand 12m]
+		
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(_vQvdToExtract)_L2.qvd (qvd)
+	;
+		
+	//Store created table
+	STORE $(_vQvdToExtract)_L2.8 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)$(_vQvdToExtract)_L2.8.qvd (qvd);
+	DROP TABLE $(_vQvdToExtract)_L2.8;
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//3.) Load previous QVD and get it to global Id Level
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	GLOBAL_TDOS_$(_vQvdToExtract)_L2.8:
+	LOAD *
+	WHERE [FC Demand Global]<>0 and not(isnull([FC Demand Global]))
+	// 20141001-Charlotte-We don't want to take into account the Global IDs which their Demand is 0 or null
+	;
+	LOAD applymap('MAPP_GLOBAL_ID_SID_REL',SID_0MATERIAL,'@')&Date	AS	LINK_TO_TARGET,
+	//LOAD applymap('MAPP_GLOBAL_ID_SID_REL',SID_0MATERIAL,'@')&[Calendar year / week]	AS	LINK_TO_TARGET,
+	//Save the global Id because later we will use it to get one SID_0MATERIAL and link the qvd in Facts
+		applymap('MAPP_GLOBAL_ID_SID_REL',SID_0MATERIAL,'@')		AS  GLOBAL_ID,
+		Date														AS	Date,
+		[Calendar year / week]										AS	[Calendar year / week],
+		sum([DoS Inv])												AS	[DoS Inv Global],
+		sum([DoS Inv Qty])											AS	[DoS Inv Qty Global],
+		sum([FC Demand 12m])										AS	[FC Demand Global]
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)$(_vQvdToExtract)_L2.8.qvd (qvd)
+	GROUP BY applymap('MAPP_GLOBAL_ID_SID_REL',SID_0MATERIAL,'@'),[Calendar year / week],Date
+	;
+	
+	INNER JOIN (GLOBAL_TDOS_$(_vQvdToExtract)_L2.8) LOAD 
+		[m.Global Material ID]&Date as LINK_TO_TARGET, 
+		dos.MAX_EXT,
+		dos.MIN_EXT,
+		dos.Max,
+		dos.Min,
+		[dos.Target DOS]
+	RESIDENT FF_TARGETS;
+	
+	//Store created table
+	DROP FIELD LINK_TO_TARGET;
+	STORE GLOBAL_TDOS_$(_vQvdToExtract)_L2.8 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)GLOBAL_TDOS_$(_vQvdToExtract)_L2.8.qvd (qvd);
+	DROP TABLE GLOBAL_TDOS_$(_vQvdToExtract)_L2.8;
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//4.) Get the Global ID Target
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	GLOBAL_TDOS_$(_vQvdToExtract)_L2.9:
+	LOAD applymap('MAPP_SID_GLOBAL_ID_REL',GLOBAL_ID,0)		AS						SID_0MATERIAL,
+		Date,
+		dos.MAX_EXT,
+		dos.MIN_EXT,
+		dos.Max,
+		dos.Min,
+		[dos.Target DOS],
+		[DoS Inv Global],
+		[DoS Inv Qty Global],
+		[Calendar year / week],
+		if([DoS Inv Global]>dos.Max,1,0)									AS	[DoS Target Above],		//DOS_TAR_ABOVE_IND,
+		if([DoS Inv Global]<=dos.Max and [DoS Inv Global]>=dos.Min,1,0)	    AS	[DoS Target Within],	//DOS_TAR_WITHIN_IND,
+		if([DoS Inv Global]<dos.Min,1,0)									AS	[DoS Target Below],		//DOS_TAR_BELOW_IND,
+		1																	AS	[DoS Target Counter]	//DOS_TAR_COUNTER
+		// 20141001-Charlotte-It should be take into account all the Global IDs that are in the target file, even if all the values are 0
+		// Previous [DoS Target Counter]: if(dos.Max<>0 and dos.Min<>0 and [dos.Target DOS]<>0 and [DoS Inv Global]<>0,1,0)
+		// Previous [DoS Target Above]:	if([DoS Inv Global]>dos.Max and dos.Max<>0 and dos.Min<>0 and [dos.Target DOS]<>0,1,0)
+		// Previous [DoS Target Within]: if(([DoS Inv Global]<=dos.Max and [DoS Inv Global]>=dos.Min) and dos.Max<>0 and dos.Min<>0 and [dos.Target DOS]<>0,1,0)
+		// Previous [DoS Target Below]: if([DoS Inv Global]<dos.Min and dos.Max<>0 and dos.Min<>0 and [dos.Target DOS]<>0,1,0)
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)GLOBAL_TDOS_$(_vQvdToExtract)_L2.8.qvd (qvd)
+	;
+	
+	//Store created table
+	STORE GLOBAL_TDOS_$(_vQvdToExtract)_L2.9 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)GLOBAL_TDOS_$(_vQvdToExtract)_L2.9.qvd (qvd);
+	DROP TABLE GLOBAL_TDOS_$(_vQvdToExtract)_L2.9;
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//5.) Concatenate priously generated QVDs
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	$(_vQvdToExtract)_L3:
+	LOAD * 
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)$(_vQvdToExtract)_L2.8.qvd (qvd);
+	CONCATENATE ($(_vQvdToExtract)_L3) LOAD *
+	FROM $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)GLOBAL_TDOS_$(_vQvdToExtract)_L2.9.qvd (qvd);
+	
+	//Store table
+	STORE $(_vQvdToExtract)_L3 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)$(_vQvdToExtract)_L3.qvd (qvd);
+	DROP TABLE $(_vQvdToExtract)_L3;
+	
+	//Delete used function variables
+	LET _vQvdToExtract = null();
+
+END SUB;

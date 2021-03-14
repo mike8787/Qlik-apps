@@ -1,0 +1,91 @@
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////// VSM Master //////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Loading the tables from VSL Portal for One Brand Pager Report
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Load VSM Product Table
+VSM_MASTER_AUX:
+Load
+     Upper(Trim(Brand)) as Brand, 
+     [Development Stage], 
+     Category, 
+     [Indication Short], 
+     [Therapeutic Area], 
+     Organization, 
+     [Logo Url], 
+     [SCRM Type], 
+     [Other Name], 
+     Description
+
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)$(vG.Sys.Path.Auxiliar.VSM.Portal)VSM PRODUCT.qvd]
+(qvd);
+
+///////////////////////////////////////////////////////////////////////////////////////
+// Left joinning the VSM Assignment Table
+Left Join (VSM_MASTER_AUX)
+Load
+     Upper(Trim(Brand)) as Brand,
+     Person, 
+    Role
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)$(vG.Sys.Path.Auxiliar.VSM.Portal)VSM ASSIGNMENT.qvd]
+(qvd);
+
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+Load Distinct
+    Upper(Trim([Brand])) as [B.Original_Brand],
+
+    ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as [B.Product_Brand],
+
+    ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '') as [B.E2E_International_Brand],
+
+     ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)),
+               ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), '')) as [B.E2E_International_Brand_Brand_Aligmnet],
+
+    ApplyMap('MAP_BRAND_GLOBAL', Upper(Trim(Brand)), '') as [B.Global_Brand],
+
+    ApplyMap('MAP_BRAND_LOCAL', Upper(Trim(Brand)), '') as [B.Local_Brand],
+    
+    'VSM Portal' as B.Metric_Origin,
+    'VSM Portal' as B.Metric
+Resident VSM_MASTER_AUX;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+VSM_MASTER:
+NoConcatenate
+Load
+     ApplyMap('MAP_BRAND_ALIGNMENT', Upper(Trim(Brand)), ApplyMap('MAP_BRAND_E2E', Upper(Trim(Brand)), Upper(Trim([Brand])))) as Brand, 
+     [Development Stage], 
+     Category, 
+     [Indication Short], 
+     [Therapeutic Area], 
+     Organization, 
+     [Logo Url], 
+     [SCRM Type], 
+     [Other Name], 
+     Description,
+     Person, 
+     Role
+
+Resident VSM_MASTER_AUX;
+Drop table VSM_MASTER_AUX;
+
+
+QUALIFY *; UNQUALIFY Brand;
+
+VSM:
+Load *
+Resident VSM_MASTER;
+Unqualify *;
+
+Drop Table VSM_MASTER;
+
+STORE VSM into [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)VSM_MASTER.qvd];
+DROP Table VSM;

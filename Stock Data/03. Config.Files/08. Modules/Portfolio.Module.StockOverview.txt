@@ -1,0 +1,39 @@
+OUTER JOIN(F_STOCK)
+LOAD
+	Date(Date#([Buy Date],'DD/MM/YYYY'),'YYYY/MM/DD') as Date,  
+    [Stock ID],
+    Autonumber([Stock ID]&'#'&[Operation ID],'Operations') as [Key Operation]
+RESIDENT M_PORTFOLIO
+WHERE len(trim([Buy Date]))>0;
+
+OUTER JOIN(F_STOCK)
+LOAD
+	Date(Date#([Sell Date],'DD/MM/YYYY'),'YYYY/MM/DD') as Date,
+    [Stock ID],
+    Autonumber([Stock ID]&'#'&[Operation ID],'Operations') as [Key Operation]
+RESIDENT M_PORTFOLIO
+WHERE len(trim([Sell Date]))>0;
+
+store F_STOCK into '[$(vRootApp)QVDS/Layer.1/portofolio_test.qvd]';
+
+
+   
+M_PORTFOLIO_AUX:
+LOAD
+	*,
+    Date(Date#([Sell Date],'DD/MM/YYYY'),'YYYY/MM/DD') as [Sell Date Aux],
+    Date(Date#([Buy Date],'DD/MM/YYYY'),'YYYY/MM/DD') as [Buy Date Aux],
+    Autonumber([Stock ID]&'#'&[Operation ID],'Operations') as [Key Operation]
+RESIDENT M_PORTFOLIO;
+
+DROP TABLE M_PORTFOLIO;
+RENAME TABLE M_PORTFOLIO_AUX TO M_PORTFOLIO;
+
+DROP FIELDS [Sell Date], [Buy Date], [Stock ID] FROM M_PORTFOLIO;
+RENAME FIELDS [Sell Date Aux] to [Sell Date], [Buy Date Aux] to [Buy Date];
+
+store M_PORTFOLIO into '[$(vRootApp)QVDS/Layer.1/portofolio_test2.qvd]';
+
+
+
+

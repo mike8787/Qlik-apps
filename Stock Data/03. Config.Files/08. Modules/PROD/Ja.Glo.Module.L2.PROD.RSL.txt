@@ -1,0 +1,147 @@
+let v.Aux.RSL.Value.Threshold=0.67; //This variable is the limit for the calculations when counting positive RSL values. The value can be changed ONLY as per Business requirements.
+//This variable it has to be changed in KPI.variable Excel file as well, so it is used in the dashboard variables calculations.
+
+///////////////////////////////////LOADING RSL QVDs///////////////////////////////////
+////////////////////////////////////ALTERNATIVE 1/////////////////////////////////////
+RSL_AUX_1:
+LOAD
+	SID_0MATERIAL,
+	//[Act GI Date],
+	Date,
+	[Result RSL Delivery Date] as [RSL Counter]
+FROM [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.PROD)F_OTD.qvd] (qvd)
+WHERE len([Result RSL Delivery Date]);
+
+
+M_MATERIAL_AUX:
+LOAD Distinct
+	SID_0MATERIAL,
+    Upper(Trim([E2E International Brand]))  as Brand,
+    Upper(Trim([Global Brand])) as [B.Global_Brand],
+	Upper(Trim([Brand Name])) as [B.Local_Brand]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+Where not IsNull([E2E International Brand]) or not len([E2E International Brand])=0;
+
+LEFT JOIN(RSL_AUX_1)
+LOAD *
+Resident M_MATERIAL_AUX;
+
+Drop Table M_MATERIAL_AUX;
+
+
+RSL_AUX:
+Load
+	SID_0MATERIAL,
+	[RSL Counter],
+	Date,
+	ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim(Brand)),Upper(Trim(Brand)))  as Brand
+Resident RSL_AUX_1;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+CONCATENATE (BRAND_QUALITY_CHECK)
+LOAD Distinct 
+	 SID_0MATERIAL as B.SID_Key,
+
+	 Brand as [B.Original_Brand],
+
+	 'OTD Dashboard' as B.Metric_Origin,
+
+	 'RSL' as B.Metric,
+
+	 Brand as [B.E2E_International_Brand],
+
+	 [B.Global_Brand],
+
+	 [B.Local_Brand],
+
+	 ApplyMap('MAP_BRAND_ALIGNMENT', Brand, Brand)  as [B.Product_Brand],
+
+	 ApplyMap('MAP_BRAND_ALIGNMENT', Brand, ApplyMap('MAP_BRAND_E2E', Brand, ''))  as [B.E2E_International_Brand_Brand_Aligmnet]
+	 
+RESIDENT RSL_AUX_1
+WHERE not len(Date)*len([Brand])=0;
+
+Drop Table RSL_AUX_1;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+RSL:
+LOAD Distinct
+	Brand,
+	Date
+RESIDENT RSL_AUX
+;
+
+LEFT JOIN(RSL)
+LOAD
+	Brand,
+	Date,
+	count([RSL Counter]) as [Counter Total RSL]
+RESIDENT RSL_AUX
+GROUP BY Brand, Date;
+
+
+LEFT JOIN(RSL)
+LOAD
+	Brand,
+	Date,
+	count([RSL Counter]) as [Counter Positive RSL]
+RESIDENT RSL_AUX
+WHERE (Subfield([RSL Counter],'-',1)/100) >= $(v.Aux.RSL.Value.Threshold) //variable to be changed as per busisness needs.
+GROUP BY Brand, Date;
+
+DROP TABLE RSL_AUX;
+
+
+RSL_AUX_2:
+LOAD
+	*,
+	Left(Date,4) as Year,
+	Round(Num([Counter Positive RSL]/[Counter Total RSL],'#.####'),0.0001) as [Actual],	
+	'59' as [KPI ID]
+RESIDENT RSL;
+
+DROP TABLE RSL;
+
+
+//Including Target/Tolerance from KPI Thresholds flat file in order to evaluate the Status of the metric.
+
+LEFT Join(RSL_AUX_2)
+LOAD 
+	[KPI ID],
+    YEAR as Year, 
+    Num#(Num(TARGET,'#,##0%'),'#,##0%') as Target,
+    Num#(Num(TOLERANCE,'#,##0%'),'#,##0%') as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=59; // 59 is the KPI ID assigned for RSL (Commercial Brands only) in Layer 1 Extractor (Hard Coded)
+
+
+RSL_AUX_3:
+LOAD
+	Brand,
+	Date,
+	Target,
+	Tolerance,
+	[Counter Positive RSL],
+	[Counter Total RSL],
+	Actual,
+	[KPI ID],
+	$(v.StatusEvaluation(10, Actual, Target, Tolerance)) as Status
+RESIDENT RSL_AUX_2;
+
+
+RENAME TABLE RSL_AUX_3 TO RSL_AUX;
+
+//Concatenate RSL Metric with facts
+Concatenate(JSC_FACTS)
+LOAD 
+	*,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident RSL_AUX;
+DROP Table RSL_AUX;

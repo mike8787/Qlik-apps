@@ -1,0 +1,42 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//CUSTOM SCRIPT MODULE 3
+//FUNCTION: LOAD master table descriptions
+//----------------------------------------------------------------------------------------------
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Read SAP QVD info
+SYS_INFO_TABLES:
+LOAD    Master_Table	as	[$Source_QVD],
+	Dimension_Desc	as	[$Table_Description],
+	Qualify_prefix	as	[$Table_cod]
+     
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.SAP.Name)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.SAP.Dim))
+WHERE Last_stored_Layer<>'NA' and not isnull(Last_stored_Layer) and Active='Yes' and Loading_Type='Star'
+;
+
+//Read FLAT FILES info
+CONCATENATE (SYS_INFO_TABLES)
+LOAD    Data_Source_Description		as	[$Table_Description],
+	Entity_Doc			as	[$Table_cod],
+	Meta_Table_Name			as	[$Source_QVD]
+     
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameINV)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+WHERE Table_Type='Star' and Load_Indicator='Yes'
+;
+
+CONCATENATE (SYS_INFO_TABLES)
+LOAD    Data_Source_Description		as	[$Table_Description],
+	Entity_Doc			as	[$Table_cod],
+	Meta_Table_Name			as	[$Source_QVD]
+     
+FROM
+[$(vG.Sys.Path.Config.Metadata)$(vG.Sys.Doc.Metadata.FlatFiles.NameDEM)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.Metadata.Sheet.Flat.Files))
+WHERE Table_Type='Star' and Load_Indicator='Yes'
+;

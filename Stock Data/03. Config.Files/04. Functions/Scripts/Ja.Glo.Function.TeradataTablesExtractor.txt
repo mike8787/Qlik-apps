@@ -1,0 +1,90 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION SYS TERADATA TABLES EXTRACTOR
+//----------------------------------------------------------------------------------------------
+//Example: call _load_sys_teradata_tables_extractor(_docName,_sheetName,_area)
+//This function loads variables located in _docName in _sheetName
+//WARNING: the field structure of the xlsx where the variables to load are alocated must follow 
+// the following structure: Fields: Source, Connection_String, Environment, User
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _load_sys_teradata_tables_extractor(_docName,_sheetName,_area)
+	
+	SYS_TERADATA_TABLES:
+	LOAD 
+		Extractor_Folder,
+		Table_Name,
+		Table_Sheet
+		 
+	FROM [$(_docName)]
+	(ooxml, embedded labels, table is $(_sheetName))
+	Where Extractor = '$(_area)';
+
+	//Count the number of flat files to Load
+	LET vG.Sys.Extract.TotalFilesToLoad = FieldValueCount('Table_Name');
+	
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//2.) For each one of the tables, load it accordingly
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	
+	FOR vG.Sys.Extract.CountFilesToLoad = 0 to  ($(vG.Sys.Extract.TotalFilesToLoad)-1)
+		
+		//Get table name and sheet name (MUST be equal)
+		LET vG.Sys.Extract.TableSheet = PEEK( 'Table_Sheet', $(vG.Sys.Extract.CountFilesToLoad), 'SYS_TERADATA_TABLES' );
+		LET vG.Sys.Extract.TableName = PEEK( 'Table_Name', $(vG.Sys.Extract.CountFilesToLoad), 'SYS_TERADATA_TABLES' );
+		LET vG.Sys.Extract.Folder = PEEK( 'Extractor_Folder', $(vG.Sys.Extract.CountFilesToLoad), 'SYS_TERADATA_TABLES' );			
+		
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		//1.) Set load param (load field_raw as field_name)
+		SYS_METADATA_TO_LOAD:
+		LOAD Concat(Trim(FIELD_NAME)& ' as ' & Trim(RENAME_AS), ',' ,Order) as LoadSentence
+		FROM [$(_docName)]
+		(ooxml, embedded labels, table is $(vG.Sys.Extract.TableSheet))
+		WHERE Load_Indicator='Yes'
+		;
+		//Set load variable
+		LET vG.Sys.Extract.FlatFiles.LoadSentence = Peek('LoadSentence', 0, 'SYS_METADATA_TO_LOAD');
+		//Drop table
+		DROP table SYS_METADATA_TO_LOAD;
+		
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		//NOT TESTED YET
+		//2.) Set Where Param
+		SYS_METADATA_TO_LOAD:
+		LOAD Concat('WHERE '&Trim(FIELD_NAME)& ' '&Trim(Where_Clausule), ' and '  ,Order) as WhereSentence
+		FROM [$(_docName)]
+		(ooxml, embedded labels, table is $(vG.Sys.Extract.TableSheet))
+		WHERE Where_Condition = 'Yes';
+		//Set where variable
+		LET vG.Sys.Extract.FlatFiles.WhereSentence = Peek('WhereSentence', 0, 'SYS_METADATA_TO_LOAD');
+		//Drop table
+		DROP table SYS_METADATA_TO_LOAD;
+		
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		//3.) For each table, load its fields using the param variables
+		$(vG.Sys.Extract.TableSheet)_L1:
+		LOAD  $(vG.Sys.Extract.FlatFiles.LoadSentence) //Load Fields variable
+		;			
+		SQL SELECT * FROM $(vG.Sys.Extract.TableName)
+		;   
+		//$(vG.Sys.Extract.FlatFiles.WhereSentence)			//Where variable defined in metadata at field level
+		 
+		 //Store and drop table
+		 STORE $(vG.Sys.Extract.TableSheet)_L1 into $(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Extract.Folder)$(vG.Sys.Extract.TableSheet)_L1.qvd (qvd);
+		 DROP TABLE $(vG.Sys.Extract.TableSheet)_L1;
+		 
+	next;
+	
+	//Delete used variables and tables
+	LET vG.Sys.Extract.TotalFilesToLoad = null();
+	LET vG.Sys.Extract.CountFilesToLoad = null();
+	LET vG.Sys.Extract.TableSheet = null();
+	LET vG.Sys.Extract.TableName = null();
+	LET vG.Sys.Extract.FlatFiles.LoadSentence = null();
+	LET vG.Sys.Extract.FlatFiles.WhereSentence = null();
+	LET vG.Sys.Extract.Folder = null();
+
+	DROP TABLE SYS_TERADATA_TABLES;
+
+End Sub;

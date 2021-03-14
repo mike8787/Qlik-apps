@@ -1,0 +1,207 @@
+//////////////////////////////////////LOADING INVENTORY QVDs////////////////////////////////////
+// INV_OVER_TIME QVD
+// INV TARGET
+// Create Brand Alignment check table - Only to check the Brand Alignments.. This table is not included in the Data Model
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Inline table to apply a left join to the facts in order to duplicate quarterly values extracted (from 03, 06, 09, 12 ) to all the months of each quarter.
+MONTH_QUARTER_AUX:
+Load * Inline  [Quarter, Month
+                Q1, 01
+                Q1, 02
+                Q1, 03
+                Q2, 04
+                Q2, 05
+                Q2, 06
+                Q3, 07
+                Q3, 08
+                Q3, 09
+                Q4, 10
+                Q4, 11
+                Q4, 12
+];
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 1. Load inventory facts
+F_INV_AUX:
+LOAD 	    
+     'Q'&ceil(Num(month(Date#(Date,'YYYYMMDD')),'00')/3) as Quarter,
+     Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,
+     [Stock Value @ Inventory (USD)] as RawValue, 
+     SID_0MATERIAL
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)FF_INV_OVER_TIME_L2.qvd] (qvd);
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 2. Add master data and targets to get the products
+LEFT JOIN (F_INV_AUX)
+LOAD 
+	 SID_0MATERIAL,  
+     Upper(Trim([m.Financial Brand])) as BRAND_AUX
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)F_M_MATERIAL_L2.qvd](qvd)
+Where not IsNull([m.Financial Brand]) or not len([m.Financial Brand])=0;
+
+
+F_INV_TARG_AUX:
+LOAD 
+	'Q'&ceil(Num(month(Date#(Date,'YYYYMMDD')),'00')/3) as Quarter,
+	 Date(Date#(Date,'YYYYMMDD'),'YYYYMMDD') as Date,	  
+     SID_0MATERIAL,
+     Ti.Target
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)FF_F_TARGETINV_L2_20*.qvd](qvd);
+
+
+LEFT JOIN (F_INV_TARG_AUX)
+LOAD 
+	 SID_0MATERIAL,  
+     Upper(Trim([m.Financial Brand])) as BRAND_AUX
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)F_M_MATERIAL_L2.qvd](qvd)
+Where not IsNull([m.Financial Brand]) or not len([m.Financial Brand])=0;
+
+
+LEFT JOIN(F_INV_AUX)
+LOAD
+	BRAND_AUX,
+	Quarter,
+	Date,
+	Ti.Target
+RESIDENT F_INV_TARG_AUX;
+
+DROP TABLE F_INV_TARG_AUX;
+
+LEFT JOIN(F_INV_AUX)
+LOAD
+	Quarter,
+	Month
+RESIDENT MONTH_QUARTER_AUX;
+
+
+F_INV_AUX2:
+LOAD
+	BRAND_AUX,
+	Date#(Year(Date)&Num(Month,'00')&'01','YYYYMMDD') as Date,
+	Ti.Target, 
+    SID_0MATERIAL,
+    RawValue
+RESIDENT F_INV_AUX;
+
+DROP TABLE F_INV_AUX;
+RENAME TABLE F_INV_AUX2 TO F_INV_AUX;
+
+DROP TABLE MONTH_QUARTER_AUX;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// For Brand Alignment check - Only to check the Brand Alignments.. This table is not included in the Data Model
+Concatenate (BRAND_QUALITY_CHECK)
+//BRAND_QUALITY_CHECK:
+LOAD Distinct 
+	 SID_0MATERIAL as B.SID_Key,
+
+	 BRAND_AUX as [B.Original_Brand],
+
+	 'Inventory and Destructions Dashboard' as B.Metric_Origin,
+
+	 'INVENTORY' as B.Metric,
+	 
+	 ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([BRAND_AUX])),Upper(Trim([BRAND_AUX]))) as [B.Product_Brand],
+
+	 ApplyMap('MAP_BRAND_E2E', Upper(Trim([BRAND_AUX])), '') as [B.E2E_International_Brand],
+
+	 ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([BRAND_AUX])),
+	  		ApplyMap('MAP_BRAND_E2E', Upper(Trim([BRAND_AUX])), ''))  as [B.E2E_International_Brand_Brand_Aligmnet]
+
+Resident F_INV_AUX
+Where not len(Date)*len([BRAND_AUX])=0;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 3. Aggregate the data by brand and yearmonth (Date)
+
+//// FINAL CALCULATIONS
+F_INV_DEV:
+LOAD Date,
+	 ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([BRAND_AUX])),Upper(Trim([BRAND_AUX]))) as Brand,
+	 sum(RawValue) as Actual,
+	 Concat(Left(RawValue,1)) as Actual_aux,
+	 only(Ti.Target) as AI_Target,
+	 Num(sum(RawValue) / only(Ti.Target)-1, '#,###.0 %') as AI_dev  //AI = Actual Inventory deviation
+	 //sum(If([Pi.Projection name]='March 2015 QBR',Pi.Projection)) as PIM15_Target,
+	 //sum(If([Pi.Projection name]='June 2015 QBR',Pi.Projection)) as PIJ15_Target,
+	 // ,Num(sum(RawValue) / sum(If([Pi.Projection name]='March 2015 QBR',Pi.Projection))-1, '#,###.0 %') as PIM15_dev
+	 //,Num(sum(RawValue) / sum(If([Pi.Projection name]='June 2015 QBR',Pi.Projection))-1, '#,###.0 %') as PIJ15_dev
+
+Resident F_INV_AUX
+Where not len(Date)=0
+Group by Date, ApplyMap('MAP_BRAND_ALIGNMENT',Upper(Trim([BRAND_AUX])),Upper(Trim([BRAND_AUX])));
+
+DROP Table F_INV_AUX;
+
+
+MAP_TARGETS_DESTR_INV:
+Mapping
+LOAD 
+	Brand& '|' &Date as Inv_Destr_Key,
+	Actual
+RESIDENT F_INV_DEV;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// 4. Add KPI ID and format results at ease
+
+F_INV_AUX2:
+LOAD * Inline [
+dummy,
+1];
+
+
+LET v.Inventory.Units= 1000000;
+
+Concatenate (F_INV_AUX2)
+LOAD Date,
+	 Year(Date) as Year,
+	 Brand,
+	 if(not len(Actual_aux)=0, Actual/$(v.Inventory.Units)) as Actual,
+	 AI_Target/$(v.Inventory.Units) as Actual_Target,
+	 if(not len(Actual_aux)=0, AI_dev) as Deviation,
+	 6 as [KPI ID]
+Resident F_INV_DEV;
+
+
+DROP Field dummy;
+DROP Table F_INV_DEV;
+
+LEFT Join(F_INV_AUX2)
+LOAD [KPI ID],
+     YEAR as Year, 
+     TARGET as Target,
+     TOLERANCE as Tolerance
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.KPI.Thresholds)FF_KPI_THRESHOLDS.qvd](qvd)
+Where [KPI ID]=6; // or [KPI ID]=7 or [KPI ID]=8; Not being used anymore as per business requirements
+
+
+F_INV:
+LOAD *,
+	$(v.StatusEvaluation(11, Deviation, Target, Tolerance)) as Status
+Resident F_INV_AUX2;
+DROP Table F_INV_AUX2;
+
+
+LET v.Inventory.Units= null();
+
+
+Concatenate(JSC_FACTS)
+LOAD *,
+1 as [Commercial Brand],
+0 as [Development Brand]
+Resident F_INV;
+DROP Table F_INV;

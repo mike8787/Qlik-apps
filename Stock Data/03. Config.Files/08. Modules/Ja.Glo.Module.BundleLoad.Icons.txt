@@ -1,0 +1,28 @@
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//CUSTOM SCRIPT MODULE 1
+//FUNCTION: LOAD BUNDLE IMAGES
+//----------------------------------------------------------------------------------------------
+//This script load the images/icons defined in \01.Config.Files\02.Variables\03.Layout\Janssen.GLOBAL.Layout.Variables into Qlikview
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+LET vG.Sys.Path.Config.Variables.Layout = '..\..\..\Import\Global\Config.Files\02.Variables\03.Layout\';
+LET vG.Sys.Doc.ColorLayout.Name = 'Janssen.GLOBAL.Layout.Variables.xlsx';
+LET vG.Sys.Doc.ColorLayout.SheetIcons = 'Icons.Layout.Var';
+
+SYS_IMAGE_PATH: 
+Bundle Info 
+LOAD 	[System Label] as SYS_IMAGE_PATH_ID,
+	//Image path is between ' so it can be readed via variable for the variable admin dashboard
+	//For bundle image purposes, the field must be without 's
+	PurgeChar([Var Value],chr(39))	as SYS_IMAGE_PATH
+     
+From
+[$(vG.Sys.Path.Config.Variables.Layout)$(vG.Sys.Doc.ColorLayout.Name)]
+(ooxml, embedded labels, table is $(vG.Sys.Doc.ColorLayout.SheetIcons))
+$(vG.Sys.ImagesToLoad)
+;
+
+LET vG.Sys.Path.Config.Variables.Layout = null();
+LET vG.Sys.Doc.ColorLayout.Name = null();
+LET vG.Sys.Doc.ColorLayout.SheetIcons = null();

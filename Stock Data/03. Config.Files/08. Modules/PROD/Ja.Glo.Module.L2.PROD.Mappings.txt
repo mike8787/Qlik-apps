@@ -1,0 +1,268 @@
+/////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////// Mapping Tables ///////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+MAP_METRICID_METRIC:
+Mapping 
+LOAD
+  [MetricID], 
+  [Metric]
+Resident M_METRIC;
+
+
+// Mapping to assign New Metric IDs based on KPI Ids that were assigned in the Layer 1.
+MAP_KPIID_METRICID:
+Mapping 
+LOAD
+	[KPI ID], 
+     [MetricID]
+Resident M_METRIC;
+
+// Mapping to assign Metric Names based on KPI Ids that were assigned in the Layer 1.
+MAP_KPIID_METRIC:
+Mapping 
+LOAD
+	[KPI ID], 
+     Metric
+Resident M_METRIC;
+Drop Field [KPI ID]; // M_Metric Table
+
+
+MAP_STAGEGATE_STAGEGATEID:
+Mapping
+LOAD Upper(Trim(Replace(StageGate,' ',''))) as Map_StageGate,
+     StageGateId as Map_StageGateId
+     
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_STAGEGATES.qvd] (qvd)
+Where StageGateId <> 21; // StageGateID 21 is for Launch
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Mapping Brand alignement
+MAP_BRAND_ALIGNMENT:
+Mapping LOAD 
+	Upper(Trim(Original)) As Original,
+	Upper(Trim([Display in Dashboard])) As [Display in Dashboard]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.FlatFiles)$(vG.Sys.Path.Auxiliar.PROD.Brand.Alignment)FF_BRAND_ALIGNMENT.qvd]
+(qvd);
+
+// Mapping E2E Brand alignement
+MAP_BRAND_E2E:
+Mapping Load
+     Upper(Trim([E2E International Brand])) as MAP_Brand,
+     Upper(Trim([E2E International Brand])) as MAP_E2E_Brand
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+Where len(Replace([E2E International Brand],' ',''))>0;
+
+// Mapping GLOBAL Brand alignement
+MAP_BRAND_GLOBAL:
+Mapping Load
+     Upper(Trim([Global Brand])) as MAP_Brand,
+     Upper(Trim([Global Brand])) as MAP_Global_Brand
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+Where len(Replace([Global Brand],' ',''))>0;
+
+// Mapping LOCAL Brand alignement
+MAP_BRAND_LOCAL:
+Mapping Load
+     Upper(Trim([Brand Name])) as MAP_Brand,
+     Upper(Trim([Brand Name])) as MAP_Local_Brand
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+Where len(Replace([Brand Name],' ',''))>0;
+
+
+// Mapping E2E International Brand using SKU and Material group
+MAP_SKUMATERIALGROUP_E2EBRAND:
+Mapping LOAD
+     if(len(text([Material / SKU]))>=18,
+					replace(ltrim(replace(replace(ltrim(replace(right([Material / SKU],14), '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0),
+						replace(ltrim(replace(replace(ltrim(replace([Material / SKU], '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0))
+     &'-'&Upper(Trim([Material group])) As [SKU + MAT_Group],      
+     Upper(Trim([E2E International Brand])) as [E2E International Brand]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+Where [E2E International Brand] <> 'NA';
+
+// Mapping Global Brand using SKU and Material group
+MAP_SKUMATERIALGROUP_GLOBALBRAND:
+Mapping Load
+     if(len(text([Material / SKU]))>=18,
+					replace(ltrim(replace(replace(ltrim(replace(right([Material / SKU],14), '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0),
+						replace(ltrim(replace(replace(ltrim(replace([Material / SKU], '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0))
+     &'-'&Upper(Trim([Material group])) As [SKU + MAT_Group],   
+     Upper(Trim([Global Brand])) as [Global Brand]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd);
+
+
+// Mapping Local Brand alignement using SKU and Material group
+MAP_SKUMATERIALGROUP_LOCALBRAND:
+Mapping Load
+	if(len(text([Material / SKU]))>=18,
+					replace(ltrim(replace(replace(ltrim(replace(right([Material / SKU],14), '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0),
+						replace(ltrim(replace(replace(ltrim(replace([Material / SKU], '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0))
+     &'-'&Upper(Trim([Material group])) As [SKU + MAT_Group],  
+     Upper(Trim([Brand Name])) as [Local Brand]
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd);
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Brand Alignment Mapping for LIFR and Stock Outs
+// SID_KEY from LIFR and Stock Outs to E2E International Brand
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+//Loading SID Key of LIFR
+KPIMETRIC_MAP_E2E:
+LOAD
+     SID_Key
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.KPITool)F_LIFR_L2.qvd]
+(qvd)
+Where LIFR_AREA_ID = 1;
+
+//Loading SID Key of Stock Outs
+Concatenate (KPIMETRIC_MAP_E2E)
+LOAD 
+	SID_Key
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.KPITool)F_STK_OUT_L2.qvd]
+(qvd);
+
+//Loading SKU and Metrial Group from Demand Master
+Left Join (KPIMETRIC_MAP_E2E)
+LOAD SID_Key, 
+     [m.Material group],
+     [m.Material Description],
+     m.SKU,  
+     m.SKU & [m.Material group] as SKU_MATGROUP_Key
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.Auxiliar.KPITool)$(vG.Sys.Path.QVD.FlatFiles)FF_STA_DEMAND_MASTER_L2.5_BSC.qvd]
+(qvd)
+Where not Len(m.SKU)*Len([m.Material group]) = 0;
+
+// Loading E2E Brand, Global and Local Brand from SAP Master
+Left Join (KPIMETRIC_MAP_E2E)
+LOAD 
+     [E2E International Brand], 
+     [Global Brand],
+     [Brand Name],
+     if(len(text([Material / SKU]))>=18,
+                                  replace(ltrim(replace(replace(ltrim(replace(right([Material / SKU],14), '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0),
+                                         replace(ltrim(replace(replace(ltrim(replace([Material / SKU], '0', ' ')), ' ', 0), 'AA', ' ')), ' ', 0))  
+     & [Material group] as SKU_MATGROUP_Key
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd]
+(qvd)
+Where len(Replace([E2E International Brand],' ',''))>0 and [E2E International Brand] <> 'NA';
+
+// Creating Counter of Distinct values
+Left Join (KPIMETRIC_MAP_E2E)
+LOAD SID_Key,
+       count( DISTINCT [m.Material Description]) as MaterialDescription_Counter,
+       count( DISTINCT [E2E International Brand]) as E2EBrand_Counter,
+       count( DISTINCT [Global Brand]) as GlobalBrand_Counter,
+       count( DISTINCT [E2E International Brand]) as LocalBrand_Counter
+Resident KPIMETRIC_MAP_E2E
+Group by SID_Key;
+
+// Mapping from SID Key to E2E Brand
+MAP_SIDKEY_E2EBRAND:
+Mapping LOAD SID_Key as MAP_KEY,
+       [E2E International Brand] as MAP_E2E
+Resident KPIMETRIC_MAP_E2E
+Where E2EBrand_Counter=1 and len(Replace([E2E International Brand],' ',''))>0; 
+
+// Mapping from SID Key to Global Brand
+MAP_SIDKEY_GLOBALBRAND:
+Mapping LOAD SID_Key as MAP_KEY,
+       [Global Brand] as MAP_GLOBAL
+Resident KPIMETRIC_MAP_E2E
+Where GlobalBrand_Counter=1 and len(Replace([Global Brand],' ',''))>0; 
+
+// Mapping from SID Key to Local Brand
+MAP_SIDKEY_LOCALBRAND:
+Mapping LOAD SID_Key as MAP_KEY,
+       [Brand Name] as MAP_GLOBAL
+Resident KPIMETRIC_MAP_E2E
+Where LocalBrand_Counter=1 and len(Replace([Brand Name],' ',''))>0; 
+
+// Mapping from SID Key to m.Material Description from FF_STA_DEMAND_MASTER_L2.5_BSC.qvd
+MAP_SIDKEY_MATERIALDESCRIPTION:
+Mapping LOAD SID_Key as MAP_KEY,
+       [m.Material Description] as MAP_MATERIALDESCRIPTION
+Resident KPIMETRIC_MAP_E2E
+Where MaterialDescription_Counter=1 and len(Replace([m.Material Description],' ',''))>0; 
+
+Drop Table KPIMETRIC_MAP_E2E;
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//Mappings for Product Naster
+
+// Mapping Therapeutic Area ID from SharePoint
+MAP_THERAPEUTICAREAID_BRAND:
+Mapping
+Load Distinct
+  Upper(Trim(ProductName))& If(Len(ProductStrength) > 0, '-'&Upper(Trim(ProductStrength)))& If(Len(AdditionalClarification) > 0,'-'&Upper(Trim(AdditionalClarification))) as ProductName,
+  TherapeuticArea
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_PRODUCT.qvd]
+(qvd);
+
+
+// Mapping for Therapeutic Area from SAP Master
+MAP_E2E_THERAPEUTIC_AREA:
+Mapping
+Load
+  Upper(Trim([E2E International Brand])) as [E2E International Brand],
+  [Therapeutic area]
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+WHERE [Therapeutic area]<>'Undefined';
+
+
+// Mapping for Platform from SAP Master
+MAP_E2E_PLATFORM:
+Mapping
+Load
+  Upper(Trim([E2E International Brand])) as [E2E International Brand],
+  Platform
+From [$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer2)$(vG.Sys.Path.QVD.Master.Data)M_MATERIAL_L2.qvd](qvd)
+WHERE Platform<>'Undefined';
+
+// Mapping for Therapeutic Area from SharePoint
+MAP_THERAPEUTICID_AREA_SP:
+Mapping
+Load
+  TherapeuticAreaId,
+  TherapeuticArea
+From
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer1)$(vG.Sys.Path.Auxiliar.PROD)$(vG.Sys.Path.QVD.SharePoint)M_SP_THERAPEUTICAREAS.qvd]
+(qvd);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Mapping to get dates from Destructions calendar
+// This mapping can only be used for Destructions data
+MAP_DATE_DESTDATE:
+Mapping
+LOAD Date(Date#(Date,'DD/MM/YYYY'),'YYYYMMDD') as MAP_Date, 
+    Date(Date#(Date(Date#(Num(Year),'YYYY'),'YYYY')&Date(Date#(Des_Month,'MMM'),'MM')&'01','YYYYMMDD'),'YYYYMMDD') as MAP_DESTDATE
+FROM
+[$(vG.Sys.Path.QVD.Files)$(vG.Sys.Path.QVD.Layer3)$(vG.Sys.Path.QVD.Inventory)$(vG.Sys.Path.QVD.FlatFiles)DESTR_CALENDAR.qvd](qvd)
+;
+
+
+
+
+BRAND_QUALITY_CHECK:
+LOAD * INLINE [Dummy_Brand];

@@ -1,0 +1,37 @@
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//----------------------------------------------------------------------------------------------
+//FUNCTION DELETE VARIABLES
+//----------------------------------------------------------------------------------------------
+//This function loads variables located in table SYS_VARIABLES_INFO where field SysVarType=_sysTypeDel
+//Example: call _delete_variables(_sysTypeDel)
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+sub _delete_variables(_sysTypeDel)
+
+	//Load the variables info in an aux table so later we can delete each variable
+	SYS_VARIABLES_INFO_TO_DELETE:
+	NOCONCATENATE LOAD 	SysVarName
+
+	RESIDENT SYS_VARIABLES_INFO
+	WHERE SysVarType='$(_sysTypeDel)';
+
+	//Count the number of Variables to delete
+	LET vSys_Total_VariablesToDelete = FieldValueCount('SysVarName');
+	
+	FOR vSys.Count.VariablesToDelete = 0 To ($(vSys_Total_VariablesToDelete)-1)
+
+		//Read the variable name
+		LET vSys_VariableToDelete = Peek('SysVarName', vSys.Count.VariablesToDelete, 'SYS_VARIABLES_INFO_TO_DELETE');
+		//Delete it
+		LET $(vSys_VariableToDelete) = Null();
+	
+	NEXT vSys.Count.VariablesToDelete;//Loop variables
+
+	drop table SYS_VARIABLES_INFO_TO_DELETE;
+	LET vSys_VariableToDelete = null();
+	LET vSys_Total_VariablesToDelete = null();
+	LET _sysTypeDel= null();
+	LET vSys.Count.VariablesToDelete=null();
+End Sub;
+
